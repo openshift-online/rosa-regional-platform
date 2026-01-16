@@ -1,0 +1,6 @@
+Using claude 2.1.9 sonnet 4.5
+1. Create directory .local in root
+2. Add all relevant documents
+3. Execute the following prompt:
+
+"Create or update a markdown file in the 'docs' directory named README.md which broadly characterizes the goals of the openshift regionality project.  Utilize all files in the '.local' directory as well as any markdown files in this repository to create or update the README.md.  Organize the document in a way that is simple to read and is a general overview.  Omit precise technical details that are likely to change over time.  The audience of this document should be considered mildly technical.  Site the source documents used."
