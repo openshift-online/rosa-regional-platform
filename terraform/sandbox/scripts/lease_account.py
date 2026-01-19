@@ -113,15 +113,15 @@ def lease_account():
                             assumed_role_object = sts.assume_role(
                                 RoleArn=role_arn,
                                 RoleSessionName="LeasedSession",
-                                DurationSeconds=14400
+                                DurationSeconds=3600
                             )
                         except ClientError as e:
                             if e.response['Error']['Code'] == 'ValidationError':
-                                print(f"Warning: Failed to assume role with 14400s duration for account {account_id}, retrying with 3600s.", file=sys.stderr)
+                                print(f"Warning: Failed to assume role with 3600s duration for account {account_id}, retrying with 1600s.", file=sys.stderr)
                                 assumed_role_object = sts.assume_role(
                                     RoleArn=role_arn,
                                     RoleSessionName="LeasedSession",
-                                    DurationSeconds=3600
+                                    DurationSeconds=1600
                                 )
                             else:
                                 raise e
