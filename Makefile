@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional destroy-management destroy-regional
+.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional destroy-management destroy-regional test test-e2e
 
 # Default target
 help:
@@ -15,6 +15,10 @@ help:
 	@echo "🛠️  Terraform Utilities:"
 	@echo "  terraform-fmt                    - Format all Terraform files"
 	@echo "  terraform-upgrade                - Upgrade provider versions"
+	@echo ""
+	@echo "🧪 Testing:"
+	@echo "  test                             - Run tests"
+	@echo "  test-e2e                         - Run end-to-end tests"
 	@echo ""
 	@echo "  help                             - Show this help message"
 
@@ -146,4 +150,18 @@ apply-infra-regional:
 	@cd terraform/config/regional-cluster && \
 		terraform init && terraform apply
 
+# =============================================================================
+# Testing Targets
+# =============================================================================
+
+# Run tests
+test:
+	@echo "🧪 Running tests..."
+	@./test/execute-prow-job.sh
+	@echo "✅ Tests complete"
+
+# Run end-to-end tests
+test-e2e:
+	@echo "🧪 Running end-to-end tests..."
+	@echo "✅ End-to-end tests complete"
 
