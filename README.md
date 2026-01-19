@@ -21,16 +21,6 @@ rosa-regional-platform/
 
 ### Cluster Provisioning
 
-Quick start (management cluster):
-```bash
-# One-time setup: Copy and edit configurations
-cp terraform/config/management-cluster/terraform.tfvars.example \
-   terraform/config/management-cluster/terraform.tfvars
-
-# Provision complete management cluster environment based on the .tfvars file
-make provision-management
-```
-
 Quick start (regional cluster):
 ```bash
 # One-time setup: Copy and edit configurations
@@ -39,6 +29,16 @@ cp terraform/config/regional-cluster/terraform.tfvars.example \
 
 # Provision complete regional cluster environment based on the .tfvars file
 make provision-regional
+```
+
+Quick start (management cluster):
+```bash
+# One-time setup: Copy and edit configurations
+cp terraform/config/management-cluster/terraform.tfvars.example \
+   terraform/config/management-cluster/terraform.tfvars
+
+# Provision complete management cluster environment based on the .tfvars file
+make provision-management
 ```
 
 ### Available Make Targets
