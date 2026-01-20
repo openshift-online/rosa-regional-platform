@@ -11,6 +11,11 @@ echo -e "${GREEN}Starting environment setup...${NC}"
 # Determine script directory for relative paths
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# Create a temporary directory for downloads and extraction
+TEMP_DIR=$(mktemp -d)
+echo "Using temporary directory: $TEMP_DIR"
+trap "rm -rf $TEMP_DIR" EXIT
+
 # 1. Install/Verify Terraform
 echo -e "${YELLOW}Checking Terraform...${NC}"
 REQUIRED_TF_VERSION="1.5.7"
@@ -20,11 +25,12 @@ if ! command -v terraform &> /dev/null; then
     # Detect OS/Arch (simplified for Linux amd64 as per typical CI environments)
     OS="linux"
     ARCH="amd64"
-
-    wget "https://releases.hashicorp.com/terraform/${REQUIRED_TF_VERSION}/terraform_${REQUIRED_TF_VERSION}_${OS}_${ARCH}.zip"
-    unzip "terraform_${REQUIRED_TF_VERSION}_${OS}_${ARCH}.zip"
-    sudo mv terraform /usr/local/bin/
-    rm "terraform_${REQUIRED_TF_VERSION}_${OS}_${ARCH}.zip"
+    echo "Downloading terraform ${REQUIRED_TF_VERSION}"
+    wget -P "$TEMP_DIR" "https://releases.hashicorp.com/terraform/${REQUIRED_TF_VERSION}/terraform_${REQUIRED_TF_VERSION}_${OS}_${ARCH}.zip"
+    echo "Unzipping terraform cli"
+    unzip -d "$TEMP_DIR" "$TEMP_DIR/terraform_${REQUIRED_TF_VERSION}_${OS}_${ARCH}.zip"
+    echo "Moving extracted terraform cli"
+    sudo mv "$TEMP_DIR/terraform" /usr/local/bin/
     echo -e "${GREEN}Terraform installed successfully.${NC}"
 else
     CURRENT_TF_VERSION=$(terraform version | head -n1 | cut -d 'v' -f 2)
@@ -35,10 +41,9 @@ fi
 echo -e "${YELLOW}Checking AWS CLI...${NC}"
 if ! command -v aws &> /dev/null; then
     echo "AWS CLI not found. Installing..."
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip -q awscliv2.zip
-    sudo ./aws/install
-    rm -rf aws awscliv2.zip
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "$TEMP_DIR/awscliv2.zip"
+    unzip -q -d "$TEMP_DIR" "$TEMP_DIR/awscliv2.zip"
+    sudo "$TEMP_DIR/aws/install"
     echo -e "${GREEN}AWS CLI installed successfully.${NC}"
 else
     echo "AWS CLI is already installed."
@@ -58,13 +63,26 @@ echo -e "${YELLOW}Checking cloud-nuke...${NC}"
 if ! command -v cloud-nuke &> /dev/null; then
     echo "cloud-nuke not found. Installing..."
     CLOUD_NUKE_VERSION="v0.37.1"
-    wget "https://github.com/gruntwork-io/cloud-nuke/releases/download/${CLOUD_NUKE_VERSION}/cloud-nuke_linux_amd64"
-    mv cloud-nuke_linux_amd64 cloud-nuke
-    chmod +x cloud-nuke
-    sudo mv cloud-nuke /usr/local/bin/
+    wget -P "$TEMP_DIR" "https://github.com/gruntwork-io/cloud-nuke/releases/download/${CLOUD_NUKE_VERSION}/cloud-nuke_linux_amd64"
+    mv "$TEMP_DIR/cloud-nuke_linux_amd64" "$TEMP_DIR/cloud-nuke"
+    chmod +x "$TEMP_DIR/cloud-nuke"
+    sudo mv "$TEMP_DIR/cloud-nuke" /usr/local/bin/
     echo -e "${GREEN}cloud-nuke installed successfully.${NC}"
 else
     echo "cloud-nuke is already installed."
+fi
+
+# 5. Install/Verify kubectl
+echo -e "${YELLOW}Checking kubectl...${NC}"
+if ! command -v kubectl &> /dev/null; then
+    echo "kubectl not found. Installing..."
+    # Install latest stable release
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    sudo mv kubectl /usr/local/bin/
+    echo -e "${GREEN}kubectl installed successfully.${NC}"
+else
+    echo "kubectl is already installed."
 fi
 
 echo -e "${GREEN}Setup complete!${NC}"

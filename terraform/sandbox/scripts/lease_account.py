@@ -30,17 +30,19 @@ def run_cloud_nuke(credentials):
     ]
 
     try:
-        # Capture output to avoid cluttering stdout unless error
+        # Stream output to stderr to allow viewing progress while keeping stdout clean for JSON
         subprocess.run(
             cmd,
             env=env,
             check=True,
-            capture_output=True,
-            text=True
+            capture_output=False,
+            text=True,
+            stdout=sys.stderr, # Redirect stdout to stderr
+            stderr=sys.stderr  # Redirect stderr to stderr
         )
         return True
     except subprocess.CalledProcessError as e:
-        print(f"cloud-nuke failed: {e.stderr}", file=sys.stderr)
+        print(f"cloud-nuke failed with exit code {e.returncode}", file=sys.stderr)
         return False
     except FileNotFoundError:
         print(f"cloud-nuke binary not found.", file=sys.stderr)
@@ -110,22 +112,11 @@ def lease_account():
                     sts = boto3.client('sts', region_name=REGION)
                     try:
                         role_arn = f"arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole"
-                        try:
-                            assumed_role_object = sts.assume_role(
-                                RoleArn=role_arn,
-                                RoleSessionName="LeasedSession",
-                                DurationSeconds=3600
-                            )
-                        except ClientError as e:
-                            if e.response['Error']['Code'] == 'ValidationError':
-                                print(f"Warning: Failed to assume role with 3600s duration for account {account_id}, retrying with 1600s.", file=sys.stderr)
-                                assumed_role_object = sts.assume_role(
-                                    RoleArn=role_arn,
-                                    RoleSessionName="LeasedSession",
-                                    DurationSeconds=1600
-                                )
-                            else:
-                                raise e
+                        assumed_role_object = sts.assume_role(
+                            RoleArn=role_arn,
+                            RoleSessionName="LeasedSession",
+                            DurationSeconds=3600
+                        )
 
                         credentials = assumed_role_object['Credentials']
 

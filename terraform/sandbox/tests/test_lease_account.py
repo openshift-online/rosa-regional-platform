@@ -22,14 +22,6 @@ class TestLeaseAccount(unittest.TestCase):
         mock_table = MagicMock()
         mock_boto_resource.return_value.Table.return_value = mock_table
 
-        # Mock empty scan response (for the initial check I plan to add)
-        # Note: If lease_account.py hasn't been updated yet, this test might fail or behave differently.
-        # But this test file is for the *future* state.
-
-        # If I run this against *current* code, it will likely fail or loop until timeout because current code doesn't check for empty pool explicitly,
-        # it just sees no available accounts and loops.
-        # So I expect this to fail initially if I ran it now.
-
         mock_table.scan.return_value = {'Items': []}
 
         captured_stderr = io.StringIO()
@@ -129,85 +121,10 @@ class TestLeaseAccount(unittest.TestCase):
         mock_sts.assume_role.assert_called_with(
             RoleArn='arn:aws:iam::123:role/OrganizationAccountAccessRole',
             RoleSessionName='LeasedSession',
-            DurationSeconds=14400
+            DurationSeconds=3600
         )
 
         sys.stdout = sys.__stdout__
-
-    @patch('lease_account.subprocess.run')
-    @patch('lease_account.boto3.client')
-    @patch('lease_account.boto3.resource')
-    @patch('lease_account.time.sleep')
-    def test_duration_fallback(self, mock_sleep, mock_boto_resource, mock_boto_client, mock_subprocess):
-        # Mock cloud-nuke success
-        mock_subprocess.return_value.returncode = 0
-        # Mock table scan to return an available account
-        mock_table = MagicMock()
-        mock_boto_resource.return_value.Table.return_value = mock_table
-
-        def scan_side_effect(**kwargs):
-            return {'Items': [{'account_id': '123', 'status': 'AVAILABLE'}]}
-
-        mock_table.scan.side_effect = scan_side_effect
-        mock_table.update_item.return_value = {}
-
-        # Mock IAM User creation
-        mock_iam_user = MagicMock()
-        # Mock iam_resource.User(...)
-        mock_boto_resource.return_value.User.return_value = mock_iam_user
-        # Mock iam_resource.create_user(...)
-        mock_boto_resource.return_value.create_user.return_value = mock_iam_user
-
-        mock_key_pair = MagicMock()
-        mock_key_pair.id = 'AKIA_NEW_USER_FALLBACK'
-        mock_key_pair.secret = 'SECRET_NEW_USER_FALLBACK'
-        mock_iam_user.create_access_key_pair.return_value = mock_key_pair
-
-        # Mock STS
-        mock_sts = MagicMock()
-        mock_boto_client.return_value = mock_sts
-
-        # Side effect for assume_role: First call raises ValidationError, second succeeds
-        validation_error = ClientError(
-            {'Error': {'Code': 'ValidationError', 'Message': 'The requested DurationSeconds exceeds...'}},
-            'AssumeRole'
-        )
-
-        success_response = {
-            'Credentials': {
-                'AccessKeyId': 'AKIA_TEST_2',
-                'SecretAccessKey': 'SECRET_TEST_2',
-                'SessionToken': 'TOKEN_TEST_2',
-                'Expiration': datetime(2025, 1, 1, tzinfo=timezone.utc)
-            }
-        }
-
-        mock_sts.assume_role.side_effect = [validation_error, success_response]
-
-        captured_stdout = io.StringIO()
-        captured_stderr = io.StringIO()
-        sys.stdout = captured_stdout
-        sys.stderr = captured_stderr
-
-        lease_account.lease_account()
-
-        output = captured_stdout.getvalue()
-        # Should succeed with the fallback credentials
-        self.assertIn('"status": "success"', output)
-        self.assertIn('"AccessKeyId": "AKIA_NEW_USER_FALLBACK"', output)
-
-        # Verify calls
-        self.assertEqual(mock_sts.assume_role.call_count, 2)
-
-        # Check first call args (14400)
-        call_args_list = mock_sts.assume_role.call_args_list
-        self.assertEqual(call_args_list[0][1]['DurationSeconds'], 14400)
-
-        # Check second call args (3600)
-        self.assertEqual(call_args_list[1][1]['DurationSeconds'], 3600)
-
-        sys.stdout = sys.__stdout__
-        sys.stderr = sys.__stderr__
 
     @patch('lease_account.boto3.resource')
     @patch('lease_account.time.sleep')
