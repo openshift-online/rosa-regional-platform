@@ -28,16 +28,17 @@ esac
 
 # Read terraform outputs
 cd ${TERRAFORM_DIR}/
-ECS_CLUSTER_ARN=$(terraform output -raw ecs_cluster_arn)
-TASK_DEFINITION_ARN=$(terraform output -raw ecs_task_definition_arn)
-CLUSTER_NAME=$(terraform output -raw cluster_name)
-PRIVATE_SUBNETS=$(terraform output -json private_subnets | jq -r '.[]' | tr '\n' ',' | sed 's/,$//')
-BOOTSTRAP_SECURITY_GROUP=$(terraform output -raw bootstrap_security_group_id)
-LOG_GROUP=$(terraform output -raw bootstrap_log_group_name)
 
-# Read repository configuration from terraform outputs
-REPOSITORY_URL=$(terraform output -raw repository_url)
-REPOSITORY_BRANCH=$(terraform output -raw repository_branch)
+OUTPUTS=$(terraform output -json)
+
+ECS_CLUSTER_ARN=$(echo "$OUTPUTS" | jq -r '.ecs_cluster_arn.value')
+TASK_DEFINITION_ARN=$(echo "$OUTPUTS" | jq -r '.ecs_task_definition_arn.value')
+CLUSTER_NAME=$(echo "$OUTPUTS" | jq -r '.cluster_name.value')
+PRIVATE_SUBNETS=$(echo "$OUTPUTS" | jq -r '.private_subnets.value[]' | tr '\n' ',' | sed 's/,$//')
+BOOTSTRAP_SECURITY_GROUP=$(echo "$OUTPUTS" | jq -r '.bootstrap_security_group_id.value')
+LOG_GROUP=$(echo "$OUTPUTS" | jq -r '.bootstrap_log_group_name.value')
+REPOSITORY_URL=$(echo "$OUTPUTS" | jq -r '.repository_url.value')
+REPOSITORY_BRANCH=$(echo "$OUTPUTS" | jq -r '.repository_branch.value')
 
 echo "Bootstrapping ArgoCD on cluster: $CLUSTER_NAME"
 
