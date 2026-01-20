@@ -13,7 +13,8 @@ rosa-regional-platform/
 ├── argocd/
 │   ├── management-cluster/           # ArgoCD configuration for management clusters
 │   └── regional-cluster/             # ArgoCD configuration for regional clusters
-├── design-decisions/                 # Architecture decision records
+├── docs/
+│   └── design-decisions/             # Design decision records
 └── scripts/                          # Deployment and validation scripts
 ```
 
