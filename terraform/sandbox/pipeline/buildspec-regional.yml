@@ -1,0 +1,84 @@
+version: 0.2
+
+env:
+  variables:
+    DYNAMODB_TABLE_NAME: "AccountPool"
+    AWS_REGION: "us-east-2"
+
+phases:
+  install:
+    commands:
+      - 'echo "Step 1: Installing dependencies..."'
+      - apt-get update && apt-get install -y jq
+      - chmod +x terraform/sandbox/scripts/setup_env.sh
+      - ./terraform/sandbox/scripts/setup_env.sh
+      - pip install -r terraform/sandbox/scripts/requirements.txt
+  build:
+    commands:
+      - 'echo "Step 2: Leasing Regional Account..."'
+      - export REG_LEASE_OUTPUT=$(python3 terraform/sandbox/scripts/lease_account.py)
+      - echo "$REG_LEASE_OUTPUT" > /tmp/reg_lease.json
+      - export REG_ACCOUNT_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.account_id')
+      - echo "$REG_ACCOUNT_ID" > /tmp/reg_account_id
+      - export AWS_ACCESS_KEY_ID_REG=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.AccessKeyId')
+      - export AWS_SECRET_ACCESS_KEY_REG=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SecretAccessKey')
+      - export AWS_SESSION_TOKEN_REG=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SessionToken // empty')
+      - 'echo "Step 3: Provisioning Regional Cluster..."'
+      - cp terraform/config/regional-cluster/terraform.tfvars.example terraform/config/regional-cluster/terraform.tfvars
+      - |
+        (
+          export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID_REG
+          export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY_REG
+          export AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN_REG
+          make pipeline-provision-regional
+        )
+      - 'echo "Step 4: Verifying ArgoCD Status..."'
+      - |
+        (
+          export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID_REG
+          export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY_REG
+          export AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN_REG
+          echo "Verifying Regional Cluster ($REG_ACCOUNT_ID)..."
+          cd terraform/config/regional-cluster
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+          echo "Checking pods in argocd namespace..."
+          kubectl get pods -n argocd
+          if kubectl get pods -n argocd | grep -q "Running"; then
+             echo "SUCCESS: ArgoCD pods are running in Regional Cluster."
+          else
+             echo "FAILURE: No running pods found in argocd namespace in Regional Cluster."
+             exit 1
+          fi
+        )
+  post_build:
+    commands:
+      - 'echo "Step 5: Destroying Regional Cluster..."'
+      - |
+        if [ -f /tmp/reg_lease.json ]; then
+          REG_LEASE_OUTPUT=$(cat /tmp/reg_lease.json)
+          REG_ACCOUNT_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.account_id')
+          echo "Restoring credentials for Regional Account $REG_ACCOUNT_ID..."
+          export AWS_ACCESS_KEY_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.AccessKeyId')
+          export AWS_SECRET_ACCESS_KEY=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SecretAccessKey')
+          export AWS_SESSION_TOKEN=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SessionToken // empty')
+
+          make pipeline-destroy-regional || echo "Make destroy failed, proceeding to release..."
+        fi
+      - 'echo "Step 6: Releasing Regional Account..."'
+      - |
+        if [ -f /tmp/reg_account_id ]; then
+          REG_ACCOUNT_ID=$(cat /tmp/reg_account_id)
+          python3 terraform/sandbox/scripts/release_account.py $REG_ACCOUNT_ID --terraform-path terraform/config/regional-cluster
+        fi
+      - 'echo "Step 7: Reporting Results..."'
+      - 'echo "Build Phase Status: $CODEBUILD_BUILD_SUCCEEDING"'
+      - |
+        if [ "$CODEBUILD_BUILD_SUCCEEDING" -eq "0" ]; then
+           echo "Build FAILED. Review logs for details."
+           echo "Result: FAILURE" > build_result.txt
+        else
+           echo "Build SUCCEEDED."
+           echo "Result: SUCCESS" > build_result.txt
+        fi
+      - cat build_result.txt

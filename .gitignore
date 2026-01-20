@@ -5,3 +5,7 @@
 *.tfvars
 *.terraform.lock.hcl
 *.zip
+
+# Python
+__pycache__/
+*.pyc

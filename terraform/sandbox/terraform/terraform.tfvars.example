@@ -1,0 +1,15 @@
+# Git repository configuration for codestar
+
+# Name of the CodeStar connection to create
+codestar_connection_name = "sandbox-github-connection"
+
+# Git repository URL containing configuration
+github_repo    = "rosa-regional-platform"
+
+# GitHub repository owner
+github_owner = "ADD YOUR GIT HB NAME HERE"
+
+# Git branch to use for codestar configuration (defaults to "main" if not specified)
+github_branch = "ADD YOUR BRANCH"
+
+# Rename this to terraform.tfvars

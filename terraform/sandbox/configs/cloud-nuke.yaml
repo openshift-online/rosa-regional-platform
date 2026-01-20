@@ -1,0 +1,4 @@
+IAMRole:
+  exclude:
+    names_regex:
+      - "^OrganizationAccountAccessRole$"

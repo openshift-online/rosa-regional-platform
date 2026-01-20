@@ -1,0 +1,15 @@
+version: 0.2
+
+batch:
+  build-list:
+    - identifier: regional_cluster_build
+      buildspec: terraform/sandbox/pipeline/buildspec-regional.yml
+      ignore-failure: false
+    - identifier: management_cluster_build
+      buildspec: terraform/sandbox/pipeline/buildspec-management.yml
+      ignore-failure: false
+
+phases:
+  install:
+    commands:
+      - 'echo "Batch build started."'
