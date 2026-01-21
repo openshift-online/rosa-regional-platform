@@ -88,12 +88,13 @@ resource "aws_ecs_task_definition" "bootstrap" {
           # Create argocd namespace
           kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
-          # Install ArgoCD
+          # Install ArgoCD with adoption annotations for self-management handoff
           helm upgrade --install argocd argo/argo-cd \
             --namespace argocd \
             --version $ARGOCD_VERSION \
-            --set global.domain="argocd.$${CLUSTER_NAME}.local" \
-            --set configs.params.server\.insecure=true \
+            --set-string 'controller.annotations.argocd\.argoproj\.io/tracking-id=argocd-self-management:argoproj.io/Application:argocd/argocd-self-management' \
+            --set-string 'server.annotations.argocd\.argoproj\.io/tracking-id=argocd-self-management:argoproj.io/Application:argocd/argocd-self-management' \
+            --set-string 'repoServer.annotations.argocd\.argoproj\.io/tracking-id=argocd-self-management:argoproj.io/Application:argocd/argocd-self-management' \
             --wait --timeout=5m
 
           echo "✓ ArgoCD installation complete"
@@ -113,28 +114,26 @@ resource "aws_ecs_task_definition" "bootstrap" {
           apiVersion: argoproj.io/v1alpha1
           kind: Application
           metadata:
-            name: $${CLUSTER_NAME}-bootstrap
+            name: root
             namespace: argocd
-            finalizers:
-              - resources-finalizer.argocd.argoproj.io
           spec:
             destination:
               namespace: argocd
               server: https://kubernetes.default.svc
             project: default
             source:
-              path: $REPOSITORY_PATH
+              path: $REPOSITORY_PATH/
               repoURL: $REPOSITORY_URL
-              targetRevision: $${REPOSITORY_BRANCH:-main}
+              targetRevision: $REPOSITORY_BRANCH
             syncPolicy:
               automated:
-                prune: true
+                prune: false
                 selfHeal: true
               syncOptions:
                 - CreateNamespace=true
           APP_EOF
 
-            echo "✓ Initial ArgoCD Application created: $${CLUSTER_NAME}-bootstrap"
+            echo "✓ Initial ArgoCD Root Application created: root"
           else
             echo "! No repository configuration provided, skipping Application creation"
           fi
