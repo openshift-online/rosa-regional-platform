@@ -56,14 +56,16 @@ phases:
       - 'echo "Step 5: Destroying Regional Cluster..."'
       - |
         if [ -f /tmp/reg_lease.json ]; then
-          REG_LEASE_OUTPUT=$(cat /tmp/reg_lease.json)
-          REG_ACCOUNT_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.account_id')
-          echo "Restoring credentials for Regional Account $REG_ACCOUNT_ID..."
-          export AWS_ACCESS_KEY_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.AccessKeyId')
-          export AWS_SECRET_ACCESS_KEY=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SecretAccessKey')
-          export AWS_SESSION_TOKEN=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SessionToken // empty')
+          (
+            REG_LEASE_OUTPUT=$(cat /tmp/reg_lease.json)
+            REG_ACCOUNT_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.account_id')
+            echo "Restoring credentials for Regional Account $REG_ACCOUNT_ID..."
+            export AWS_ACCESS_KEY_ID=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.AccessKeyId')
+            export AWS_SECRET_ACCESS_KEY=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SecretAccessKey')
+            export AWS_SESSION_TOKEN=$(echo $REG_LEASE_OUTPUT | jq -r '.credentials.SessionToken // empty')
 
-          make pipeline-destroy-regional || echo "Make destroy failed, proceeding to release..."
+            make pipeline-destroy-regional || echo "Make destroy failed, proceeding to release..."
+          )
         fi
       - 'echo "Step 6: Releasing Regional Account..."'
       - |

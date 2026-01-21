@@ -8,6 +8,8 @@ env:
 phases:
   install:
     commands:
+      - 'echo "Waiting 20 seconds to stagger start..."'
+      - sleep 20
       - 'echo "Step 1: Installing dependencies..."'
       - apt-get update && apt-get install -y jq
       - chmod +x terraform/sandbox/scripts/setup_env.sh
@@ -56,14 +58,16 @@ phases:
       - 'echo "Step 5: Destroying Management Cluster..."'
       - |
         if [ -f /tmp/mgmt_lease.json ]; then
-          MGMT_LEASE_OUTPUT=$(cat /tmp/mgmt_lease.json)
-          MGMT_ACCOUNT_ID=$(echo $MGMT_LEASE_OUTPUT | jq -r '.account_id')
-          echo "Restoring credentials for Management Account $MGMT_ACCOUNT_ID..."
-          export AWS_ACCESS_KEY_ID=$(echo $MGMT_LEASE_OUTPUT | jq -r '.credentials.AccessKeyId')
-          export AWS_SECRET_ACCESS_KEY=$(echo $MGMT_LEASE_OUTPUT | jq -r '.credentials.SecretAccessKey')
-          export AWS_SESSION_TOKEN=$(echo $MGMT_LEASE_OUTPUT | jq -r '.credentials.SessionToken // empty')
+          (
+            MGMT_LEASE_OUTPUT=$(cat /tmp/mgmt_lease.json)
+            MGMT_ACCOUNT_ID=$(echo $MGMT_LEASE_OUTPUT | jq -r '.account_id')
+            echo "Restoring credentials for Management Account $MGMT_ACCOUNT_ID..."
+            export AWS_ACCESS_KEY_ID=$(echo $MGMT_LEASE_OUTPUT | jq -r '.credentials.AccessKeyId')
+            export AWS_SECRET_ACCESS_KEY=$(echo $MGMT_LEASE_OUTPUT | jq -r '.credentials.SecretAccessKey')
+            export AWS_SESSION_TOKEN=$(echo $MGMT_LEASE_OUTPUT | jq -r '.credentials.SessionToken // empty')
 
-          make pipeline-destroy-management || echo "Make destroy failed, proceeding to release..."
+            make pipeline-destroy-management || echo "Make destroy failed, proceeding to release..."
+          )
         fi
       - 'echo "Step 6: Releasing Management Account..."'
       - |

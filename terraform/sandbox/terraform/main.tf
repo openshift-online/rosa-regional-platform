@@ -1,5 +1,6 @@
 provider "aws" {
-  region = "us-east-2"
+  region  = "us-east-2"
+  profile = "automation-rc"
 }
 
 resource "aws_dynamodb_table" "account_pool" {

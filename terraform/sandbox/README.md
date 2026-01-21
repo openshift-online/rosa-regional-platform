@@ -25,7 +25,7 @@ The system prevents race conditions and ensures isolation between concurrent tes
 *   **Python Scripts (`scripts/`):**
     *   `lease_account.py`: Scans for available accounts, locks one, assumes `OrganizationAccountAccessRole` to clean the account and create a temporary user.
     *   `release_account.py`: Cleans the account using `cloud-nuke`, deletes the temporary user, and returns the account to the pool.
-*   **Infrastructure (`terraform/`):** Manages the DynamoDB table and seeds the initial account list.
+*   **Infrastructure (`terraform/`):** Manages the DynamoDB table, seeds the initial account list, and deploys the **AWS CodePipeline**.
 
 ### State Machine
 *   **AVAILABLE:** Account is ready to be leased.
@@ -115,17 +115,45 @@ python3 scripts/release_account.py <ACCOUNT_ID>
 python3 scripts/release_account.py 123456789012
 ```
 
-## CI/CD Integration
+## Deploying the Automated Pipeline
 
-This process is designed for AWS CodeBuild or other CI/CD. See [BUILDSPEC_SNIPPET.md](BUILDSPEC_SNIPPET.md) for a practical example of how to integrate these scripts into your `buildspec.yml`.
+The repository includes a Terraform configuration to deploy a scheduled AWS CodePipeline that runs the full test suite (lease, deploy EKS clusters, verify, release).
 
-The typical pipeline flow is:
-1.  **Pre_build:** Run `lease_account.py`, parse and export credentials.
-2.  **Build:** Run tests (e.g., `go test`, `terraform apply`) using the exported credentials.
-3.  **Post_build:** Run `release_account.py` to clean up and unlock the account.
+### 1. Configure Variables
+Create a file named `terraform/sandbox/terraform/terraform.tfvars` with the following content:
+
+```hcl
+github_owner            = "your-github-username"
+github_repo             = "your-repo-name"
+github_branch           = "main"
+# Optional: Override connection name or artifacts bucket
+# codestar_connection_name = "sandbox-github-connection"
+# artifacts_bucket_name    = "my-unique-artifacts-bucket"
+```
+
+### 2. Deploy
+Run Terraform to provision the CodePipeline, CodeBuild project, EventBridge schedule, and CodeStar Connection:
+
+```bash
+cd terraform/sandbox/terraform
+terraform init
+terraform apply
+```
+
+### 3. Complete Connection Handshake
+After Terraform applies successfully, it will output the `codestar_connection_arn`.
+
+**Important:** You must complete the handshake in the AWS Console to authorize access to your GitHub repository.
+1.  Go to the AWS Console > Developer Tools > Settings > Connections.
+2.  Find the connection with the name you specified (default: `sandbox-github-connection`) which will be in `PENDING` status.
+3.  Click **Update Pending Connection** and follow the prompts to authorize with GitHub.
+
+### 4. Verify
+After the handshake is complete, the pipeline will trigger automatically based on the source change or the schedule. You can also manually trigger it from the AWS Console.
 
 ## Troubleshooting
 
+*   **Pipeline Source Action Failed:** Ensure you have completed the CodeStar connection handshake in the AWS Console.
 *   **Timeout (No accounts available):**
     *   The pool may be exhausted. Wait for a test to finish or increase the number of accounts.
     *   The script prints a list of `IN_USE` accounts to stderr when it times out.
