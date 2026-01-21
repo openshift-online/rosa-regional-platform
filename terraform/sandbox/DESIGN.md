@@ -23,6 +23,7 @@ graph TD
     User[CI/CD Runner]
     LeaseScript[lease_account.py]
     ReleaseScript[release_account.py]
+    JanitorScript[janitor.py]
     DynamoDB[(DynamoDB: AccountPool)]
     MgmtAccount[Management Account]
     TargetAccount[Target Sandbox Account]
@@ -30,11 +31,15 @@ graph TD
 
     User -->|Runs| LeaseScript
     User -->|Runs| ReleaseScript
+    User -->|Runs (Scheduled)| JanitorScript
+
     LeaseScript -->|Locks| DynamoDB
-    ReleaseScript -->|Unlocks| DynamoDB
+    ReleaseScript -->|Unlocks/Updates| DynamoDB
+    JanitorScript -->|Scans| DynamoDB
 
     LeaseScript -->|Assumes Role| TargetAccount
     ReleaseScript -->|Assumes Role| TargetAccount
+    JanitorScript -->|Calls| ReleaseScript
 
     LeaseScript -->|Executes| CloudNuke
     ReleaseScript -->|Executes| CloudNuke
@@ -48,12 +53,15 @@ Accounts in the DynamoDB table transition through the following states:
 
 1.  **AVAILABLE:** The account is free and ready to be leased.
 2.  **IN_USE:** The account is currently locked by a test runner.
-3.  **DIRTY:** The account encountered an error during `cloud-nuke` or provisioning and requires manual intervention.
+3.  **FAILED:** The account failed verification or test. It is retained for debugging for a set period (e.g., 3 hours) before being automatically cleaned up.
+4.  **DIRTY:** The account encountered an error during `cloud-nuke` or provisioning and requires manual intervention.
 
 **Transitions:**
 *   `AVAILABLE` -> `IN_USE`: On successful lease (Atomically locked).
 *   `IN_USE` -> `AVAILABLE`: On successful release (after cleanup).
-*   `IN_USE` -> `DIRTY`: If `cloud-nuke` fails during release.
+*   `IN_USE` -> `FAILED`: On release if the test failed (to preserve state for debugging).
+*   `FAILED` -> `AVAILABLE`: Automatically by the Janitor after retention period, or manually released.
+*   `IN_USE` / `FAILED` -> `DIRTY`: If `cloud-nuke` fails during release.
 *   `AVAILABLE` -> `DIRTY`: If `cloud-nuke` fails during lease (before returning to user).
 
 ## 4. Detailed Workflow

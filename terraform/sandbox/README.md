@@ -21,15 +21,17 @@ The system prevents race conditions and ensures isolation between concurrent tes
 ## Architecture
 
 ### Components
-*   **DynamoDB Table (`AccountPool`):** Stores the state of each account (`AVAILABLE`, `IN_USE`, or `DIRTY`).
+*   **DynamoDB Table (`AccountPool`):** Stores the state of each account (`AVAILABLE`, `IN_USE`, `FAILED`, or `DIRTY`).
 *   **Python Scripts (`scripts/`):**
     *   `lease_account.py`: Scans for available accounts, locks one, assumes `OrganizationAccountAccessRole` to clean the account and create a temporary user.
     *   `release_account.py`: Cleans the account using `cloud-nuke`, deletes the temporary user, and returns the account to the pool.
+    *   `janitor.py`: Runs on a schedule to identify accounts stuck in `FAILED` state longer than the retention period (3 hours) and triggers their release/cleanup.
 *   **Infrastructure (`terraform/`):** Manages the DynamoDB table, seeds the initial account list, and deploys the **AWS CodePipeline**.
 
 ### State Machine
 *   **AVAILABLE:** Account is ready to be leased.
 *   **IN_USE:** Account is currently locked by a test runner.
+*   **FAILED:** Account failed verification or test. Retained for 3 hours for debugging, then automatically cleaned by `janitor.py`.
 *   **DIRTY:** Account failed cleanup or encountered an error. Requires manual intervention.
 
 ## Prerequisites
@@ -106,8 +108,14 @@ Use the credentials from step 1 to run your tests. These credentials belong to a
 ### 3. Release the Account
 Once testing is complete, release the account back to the pool. This triggers a final cleanup.
 
+If the test failed, you should release the account with status `FAILED` to preserve it for debugging.
+
 ```bash
+# Success case
 python3 scripts/release_account.py <ACCOUNT_ID>
+
+# Failure case (preserves for 3h)
+python3 scripts/release_account.py <ACCOUNT_ID> --status FAILED
 ```
 
 **Example:**
