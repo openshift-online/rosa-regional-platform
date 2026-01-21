@@ -54,7 +54,7 @@ RUN_TASK_OUTPUT=$(aws ecs run-task \
       \"name\": \"bootstrap\",
       \"environment\": [
         {\"name\": \"CLUSTER_NAME\", \"value\": \"$CLUSTER_NAME\"},
-        {\"name\": \"ARGOCD_VERSION\", \"value\": \"9.3.0\"},
+        {\"name\": \"ARGOCD_VERSION\", \"value\": \"9.3.4\"},
         {\"name\": \"REPOSITORY_URL\", \"value\": \"$REPOSITORY_URL\"},
         {\"name\": \"REPOSITORY_PATH\", \"value\": \"$REPOSITORY_PATH\"},
         {\"name\": \"REPOSITORY_BRANCH\", \"value\": \"$REPOSITORY_BRANCH\"}

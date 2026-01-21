@@ -1,125 +1,83 @@
+
+# ArgoCD Self-Management
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: argocd-self-management
   namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: https://argoproj.github.io/argo-helm
     chart: argo-cd
-    targetRevision: "9.3.4"
+    targetRevision: 9.3.4
     helm:
-      releaseName: argocd
-      values: |
-        # Maintain compatibility with existing bootstrap configuration
-        server:
-          service:
-            type: ClusterIP
-          # Keep insecure mode for internal cluster access
-          extraArgs:
-            - --insecure
-
-        # Preserve existing configurations from bootstrap
+      valuesObject:
         configs:
           params:
-            server.insecure: true
-
-        # Resource management optimized for regional clusters
-        controller:
-          resources:
-            requests:
-              cpu: 500m
-              memory: 1Gi
-            limits:
-              cpu: 2000m
-              memory: 4Gi
-
+            server.insecure: false
         server:
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-
-        repoServer:
-          resources:
-            requests:
-              cpu: 200m
-              memory: 512Mi
-            limits:
-              cpu: 1000m
-              memory: 2Gi
-
-        # High availability configuration for regional cluster
-        controller:
-          replicas: 1  # Single replica for cost optimization
-
-        server:
-          replicas: 2  # HA for server component
-
-        repoServer:
-          replicas: 2  # HA for repo server
-
-        # Security hardening
-        global:
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 999
-            fsGroup: 999
-
-        # Monitoring configuration
-        controller:
-          metrics:
-            enabled: true
-            serviceMonitor:
-              enabled: false  # TODO(Claudio): Enable once Prometheus operator is deployed
-
-        server:
-          metrics:
-            enabled: true
-            serviceMonitor:
-              enabled: false
-
-        repoServer:
-          metrics:
-            enabled: true
-            serviceMonitor:
-              enabled: false
-
-        # Required to not have redis re-initialized post the initial install
-        # This is required to have argocd manage itself
-        redis:
-          secretInit:
-            enabled: false
+          replicas: 2
+        redisSecretInit:
+          enabled: false # Workaround for https://github.com/argoproj/argo-helm/issues/2887
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
-
   syncPolicy:
     automated:
-      prune: false    # Prevent accidental deletion of ArgoCD itself
-      selfHeal: true  # Auto-fix configuration drift
-    syncOptions:
-      - CreateNamespace=false  # Namespace already exists from bootstrap
-      - Replace=true          # Allow replacement for upgrades
-      - ServerSideApply=true  # Use server-side apply for better conflict resolution
+      prune: false  # Prevent accidental deletion
+      selfHeal: true
     retry:
       limit: 5
       backoff:
         duration: 5s
         factor: 2
         maxDuration: 3m
-
-  # Ignore status differences to prevent sync loops
   ignoreDifferences:
-    - group: argoproj.io
-      kind: Application
+    # Ignore Argo CD tracking annotations on all kinds
+    - group: ""
+      kind: Service
       jsonPointers:
-        - /status
+        - /metadata/annotations/argocd.argoproj.io~1tracking-id
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /metadata/annotations/argocd.argoproj.io~1tracking-id
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /metadata/annotations/argocd.argoproj.io~1tracking-id
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding
+      jsonPointers:
+        - /metadata/annotations/argocd.argoproj.io~1tracking-id
+
+    # Ignore Helm dynamic checksum annotations
+    - group: ""
+      kind: ConfigMap
+      jsonPointers:
+        - /metadata/annotations/checksum~1cmd-params
+        - /metadata/annotations/checksum~1config
+        - /metadata/annotations/checksum~1secret
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /metadata/annotations/checksum~1cmd-params
+        - /metadata/annotations/checksum~1config
+        - /metadata/annotations/checksum~1secret
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /metadata/annotations/checksum~1cmd-params
+        - /metadata/annotations/checksum~1config
+        - /metadata/annotations/checksum~1secret
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /metadata/annotations/checksum~1cmd-params
+        - /metadata/annotations/checksum~1config
+        - /metadata/annotations/checksum~1secret
