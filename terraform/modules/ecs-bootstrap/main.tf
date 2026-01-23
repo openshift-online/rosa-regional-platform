@@ -130,7 +130,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
             source:
               repoURL: "$REPOSITORY_URL"
               targetRevision: "$REPOSITORY_BRANCH"
-              path: argocd/rendered/$CLUSTER_TYPE/$ENVIRONMENT/$SECTOR/$REGION
+              path: argocd/rendered/$CLUSTER_TYPE-cluster/$ENVIRONMENT/$SECTOR/$REGION
               helm:
                 valuesObject:
                   environment: "$ENVIRONMENT"

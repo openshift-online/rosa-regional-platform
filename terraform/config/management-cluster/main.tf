@@ -44,12 +44,6 @@ module "ecs_bootstrap" {
   repository_url    = var.repository_url
   repository_path   = var.repository_path
   repository_branch = var.repository_branch
-
-  # Cluster metadata for template rendering
-  environment  = var.environment
-  sector       = var.sector
-  region       = data.aws_region.current.name
-  cluster_type = "management"
 }
 
 # =============================================================================
@@ -84,7 +78,7 @@ output "sector" {
 
 output "region" {
   description = "AWS region (auto-detected from provider)"
-  value       = data.aws_region.current.name
+  value       = data.aws_region.current.id
 }
 
 output "cluster_type" {
