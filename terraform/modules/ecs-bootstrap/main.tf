@@ -106,34 +106,62 @@ resource "aws_ecs_task_definition" "bootstrap" {
 
           echo "✓ ArgoCD is running and ready"
 
-          # Create initial Application if repository details are provided
+          # Create initial ArgoCD Root Application if repository details are provided
           if [[ -n "$${REPOSITORY_URL:-}" ]] && [[ -n "$${REPOSITORY_PATH:-}" ]]; then
-            echo "Creating initial ArgoCD Application..."
+            echo "Creating initial ArgoCD Root Application..."
 
+            # Create the sophisticated root application with embedded template
             cat <<-APP_EOF | kubectl apply -f -
           apiVersion: argoproj.io/v1alpha1
           kind: Application
           metadata:
             name: root
             namespace: argocd
+            labels:
+              argocd.argoproj.io/instance: root
+              environment: "$ENVIRONMENT"
+              sector: "$SECTOR"
+              region: "$REGION"
+              cluster_type: "$CLUSTER_TYPE"
+            annotations:
+              argocd.argoproj.io/sync-wave: "0"
           spec:
-            destination:
-              namespace: argocd
-              server: https://kubernetes.default.svc
             project: default
             source:
-              path: $REPOSITORY_PATH/
-              repoURL: $REPOSITORY_URL
-              targetRevision: $REPOSITORY_BRANCH
+              repoURL: "$REPOSITORY_URL"
+              targetRevision: "$REPOSITORY_BRANCH"
+              path: argocd/rendered/$CLUSTER_TYPE/$ENVIRONMENT/$SECTOR/$REGION
+              helm:
+                valuesObject:
+                  environment: "$ENVIRONMENT"
+                  sector: "$SECTOR"
+                  region: "$REGION"
+                  git_repo: "$REPOSITORY_URL"
+                  git_revision: "$REPOSITORY_BRANCH"
+                  cluster_type: "$CLUSTER_TYPE"
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: argocd
             syncPolicy:
               automated:
                 prune: false
                 selfHeal: true
+              retry:
+                limit: 5
+                backoff:
+                  duration: 5s
+                  maxDuration: 3m
+                  factor: 2
               syncOptions:
-                - CreateNamespace=true
+              - CreateNamespace=true
           APP_EOF
 
-            echo "✓ Initial ArgoCD Root Application created: root"
+            echo "✓ Initial ArgoCD Root Application created with metadata: root"
+            echo "   Environment: $ENVIRONMENT"
+            echo "   Sector: $SECTOR"
+            echo "   Region: $REGION"
+            echo "   Cluster Type: $CLUSTER_TYPE"
+            echo "   Source Path: argocd/rendered/$CLUSTER_TYPE/$ENVIRONMENT/$SECTOR/$REGION"
           else
             echo "! No repository configuration provided, skipping Application creation"
           fi

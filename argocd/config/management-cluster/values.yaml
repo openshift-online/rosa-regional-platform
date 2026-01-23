@@ -1,0 +1,20 @@
+# Configuration for ArgoCD root Application on region clusters
+# These values are passed from the ApplicationSet in the global cluster
+
+# The environment name (e.g., integration, staging, production)
+environment: ""
+
+# The sector/tenant identifier
+sector: ""
+
+# The GCP region where this region cluster is deployed
+region: ""
+
+# The Git repository URL for ArgoCD Applications
+git_repo: ""
+
+# The Git revision (branch, tag, or commit) for ArgoCD Applications
+git_revision: "main"
+
+# The cluster type (management/regional)
+cluster_type: ""

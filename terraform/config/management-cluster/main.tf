@@ -2,6 +2,9 @@
 # Management Cluster Infrastructure Configuration
 # =============================================================================
 
+# Get current AWS region for auto-detection
+data "aws_region" "current" {}
+
 # Configure AWS provider
 provider "aws" {
   default_tags {
@@ -41,6 +44,12 @@ module "ecs_bootstrap" {
   repository_url    = var.repository_url
   repository_path   = var.repository_path
   repository_branch = var.repository_branch
+
+  # Cluster metadata for template rendering
+  environment  = var.environment
+  sector       = var.sector
+  region       = data.aws_region.current.name
+  cluster_type = "management"
 }
 
 # =============================================================================
@@ -57,4 +66,28 @@ module "bastion" {
   cluster_security_group_id = module.management_cluster.cluster_security_group_id
   vpc_id                    = module.management_cluster.vpc_id
   private_subnet_ids        = module.management_cluster.private_subnets
+}
+
+# =============================================================================
+# Outputs for Bootstrap Value Injection
+# =============================================================================
+
+output "environment" {
+  description = "Environment identifier for the cluster"
+  value       = var.environment
+}
+
+output "sector" {
+  description = "Sector identifier for the cluster"
+  value       = var.sector
+}
+
+output "region" {
+  description = "AWS region (auto-detected from provider)"
+  value       = data.aws_region.current.name
+}
+
+output "cluster_type" {
+  description = "Type of cluster (regional or management)"
+  value       = "management"
 }

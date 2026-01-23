@@ -1,0 +1,7 @@
+environment: ''
+sector: ''
+region: ''
+git_repo: ''
+git_revision: main
+cluster_type: ''
+argocd_chart_version: 9.3.4

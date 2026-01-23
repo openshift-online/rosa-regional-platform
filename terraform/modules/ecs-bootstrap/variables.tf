@@ -46,3 +46,24 @@ variable "repository_branch" {
   type        = string
   default     = "main"
 }
+
+# Cluster metadata variables for template rendering
+variable "environment" {
+  description = "Environment identifier for the cluster (e.g., development, staging, production)"
+  type        = string
+}
+
+variable "sector" {
+  description = "Sector identifier for the cluster (e.g., dev, test, prod)"
+  type        = string
+}
+
+variable "region" {
+  description = "AWS region for the cluster"
+  type        = string
+}
+
+variable "cluster_type" {
+  description = "Type of cluster (regional or management)"
+  type        = string
+}

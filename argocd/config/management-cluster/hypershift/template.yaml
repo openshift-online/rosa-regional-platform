@@ -1,0 +1,49 @@
+# HyperShift Operator Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hypershift-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # Reference to the HyperShift Helm chart in this repository
+    repoURL: "{{ .Values.git_repo }}"
+    path: helm/hypershift
+    targetRevision: "{{ .Values.git_revision }}"
+    helm:
+      valuesObject:
+        # S3 bucket for OIDC discovery documents
+        oidcStorageS3Bucket:
+          name: "hypershift-mc-{{ .Values.region }}-bucket"
+          region: "{{ .Values.region }}"
+
+        # External DNS configuration for service discovery
+        externalDns:
+          image: registry.redhat.io/edo/external-dns-rhel9@sha256:591de53fdaae236c8d384deb6c927f4f397bf44ce4580bbc70b57c112cf22315
+          domain: "."
+
+        # HyperShift operator image
+        hypershift:
+          image: quay.io/acm-d/rhtap-hypershift-operator:latest
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hypershift-install
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true

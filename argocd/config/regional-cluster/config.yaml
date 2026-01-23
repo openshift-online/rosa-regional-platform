@@ -1,0 +1,4 @@
+targets:
+- environment: integration
+  sector: dev
+  region: eu-west-1
