@@ -1,5 +1,0 @@
-apiVersion: v2
-name: regional-cluster-integration-dev-eu-west-2
-description: ArgoCD applications for regional-cluster cluster in integration/dev/eu-west-2
-type: application
-version: 0.1.0

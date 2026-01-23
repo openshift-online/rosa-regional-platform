@@ -4,4 +4,4 @@ region: ''
 git_repo: ''
 git_revision: main
 cluster_type: ''
-argocd_chart_version: 9.3.4
+argocd_chart_version: 9.1.0
