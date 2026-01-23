@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: '{{ .Values.git_repo | quote }}'
     targetRevision: '{{ .Values.git_revision | quote }}'
-    path: argocd/rendered/region/{{ .Values.environment }}/{{ .Values.sector }}/{{ .Values.region }}
+    path: argocd/rendered/{{ .Values.environment }}-cluster/{{ .Values.environment }}/{{ .Values.sector }}/{{ .Values.region }}
     helm:
       valuesObject:
         environment: '{{ .Values.environment | quote }}'
