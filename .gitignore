@@ -7,3 +7,8 @@
 *.terraform.lock.hcl
 *.zip
 bastion_task.json
+.venv
+
+# Helm
+charts/
+Chart.lock

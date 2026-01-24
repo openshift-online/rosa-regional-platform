@@ -106,37 +106,101 @@ resource "aws_ecs_task_definition" "bootstrap" {
 
           echo "✓ ArgoCD is running and ready"
 
-          # Create initial Application if repository details are provided
-          if [[ -n "$${REPOSITORY_URL:-}" ]] && [[ -n "$${REPOSITORY_PATH:-}" ]]; then
-            echo "Creating initial ArgoCD Application..."
-
-            cat <<-APP_EOF | kubectl apply -f -
-          apiVersion: argoproj.io/v1alpha1
-          kind: Application
+          echo "Creating cluster identity secret..."
+          # Create argocd cluster secret
+          cat <<-SECRET_EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
           metadata:
-            name: root
+            name: local-cluster-identity
+            namespace: argocd
+            labels:
+              argocd.argoproj.io/secret-type: cluster
+              environment: "$ENVIRONMENT"
+              sector: "$SECTOR"
+              region: "$REGION"
+              cluster_type: "$CLUSTER_TYPE"
+            annotations:
+              git_repo: "$REPOSITORY_URL"
+              git_revision: "$REPOSITORY_BRANCH"
+          type: Opaque
+          stringData:
+            name: in-cluster
+            server: https://kubernetes.default.svc
+            config: |
+              {
+                "tlsClientConfig": { "insecure": false }
+              }
+          SECRET_EOF
+
+          echo "Creating initial ArgoCD Root Applicationset..."
+
+          cat <<-APPSET_EOF | kubectl apply -f -
+          apiVersion: argoproj.io/v1alpha1
+          kind: ApplicationSet
+          metadata:
+            name: root-appset
             namespace: argocd
           spec:
-            destination:
-              namespace: argocd
-              server: https://kubernetes.default.svc
-            project: default
-            source:
-              path: $REPOSITORY_PATH/
-              repoURL: $REPOSITORY_URL
-              targetRevision: $REPOSITORY_BRANCH
-            syncPolicy:
-              automated:
-                prune: false
-                selfHeal: true
-              syncOptions:
-                - CreateNamespace=true
-          APP_EOF
+            generators:
+            - matrix:
+                generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        argocd.argoproj.io/secret-type: cluster
+                - git:
+                    directories:
+                    - path: argocd/{{metadata.labels.cluster_type}}cluster/*
+                    repoURL: '{{metadata.annotations.git_repo}}'
+                    revision: '{{metadata.annotations.git_revision}}'
+            template:
+              metadata:
+                name: '{{path.basename}}'
+              spec:
+                destination:
+                  namespace: '{{path.basename}}'
+                  server: '{{server}}'
+                project: default
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                    - ServerSideApply=true
+                    - CreateNamespace=true
+                sources:
+                - helm:
+                    valueFiles:
+                    - values.yaml
+                    - $values/argocd/rendered/{{metadata.labels.environment}}/{{metadata.labels.sector}}/{{metadata.labels.region}}/{{metadata.labels.cluster_type}}cluster-values.yaml
+                    valuesObject:
+                      global:
+                        cluster_type: '{{metadata.labels.cluster_type}}'
+                        environment: '{{metadata.labels.environment}}'
+                        region: '{{metadata.labels.region}}'
+                        sector: '{{metadata.labels.sector}}'
+                  path: '{{path}}'
+                  repoURL: '{{metadata.annotations.git_repo}}'
+                  targetRevision: '{{metadata.annotations.git_revision}}'
+                - path: argocd/rendered/{{metadata.labels.environment}}/{{metadata.labels.sector}}/{{metadata.labels.region}}
+                  ref: values
+                  repoURL: '{{metadata.annotations.git_repo}}'
+                  targetRevision: '{{metadata.annotations.git_revision}}'
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                  - CreateNamespace=true
+          APPSET_EOF
 
-            echo "✓ Initial ArgoCD Root Application created: root"
-          else
-            echo "! No repository configuration provided, skipping Application creation"
-          fi
+            echo "✓ Initial ArgoCD AplicationSet created."
+            echo "   Environment: $ENVIRONMENT"
+            echo "   Sector: $SECTOR"
+            echo "   Region: $REGION"
+            echo "   Cluster Type: $CLUSTER_TYPE"
+            echo "   ApplicationSet path: argocd/'$CLUSTER_TYPE'cluster/*"
 
           echo "=== Bootstrap completed successfully ==="
         EOF
