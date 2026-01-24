@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hypershift-install
+  namespace: hypershift-install
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 1
+  template:
+    spec:
+      containers:
+      - name: install
+        image: {{ .Values.hypershift.hypershift.image }}
+        command:
+        - /bin/sh
+        - -c
+        - |
+          hypershift install \
+            --namespace hypershift \
+            --enable-conversion-webhook=false \
+            --hypershift-image {{ .Values.hypershift.hypershift.image }} \
+            --limit-crd-install AWS \
+            --oidc-storage-provider-s3-bucket-name {{ .Values.hypershift.oidcStorageS3Bucket.name }} \
+            --oidc-storage-provider-s3-region {{ .Values.hypershift.oidcStorageS3Bucket.region }} \
+            --oidc-storage-provider-s3-secret oidc-discover \
+            --external-dns-provider aws \
+            --external-dns-domain-filter {{ .Values.hypershift.externalDns.domain }} \
+            --external-dns-secret external-dns \
+            --external-dns-image {{ .Values.hypershift.externalDns.image }}
+      restartPolicy: Never
+      serviceAccountName: hypershift-installer
+

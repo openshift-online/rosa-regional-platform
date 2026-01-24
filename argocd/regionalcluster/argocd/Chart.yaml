@@ -1,0 +1,5 @@
+apiVersion: v2
+name: argocd
+description: ArgoCD self-management via Application templates
+type: application
+version: 0.1.0

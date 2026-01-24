@@ -18,6 +18,20 @@ variable "cost_center" {
 }
 
 # =============================================================================
+# Cluster Metadata Variables
+# =============================================================================
+
+variable "environment" {
+  description = "Environment identifier for the cluster (e.g., development, staging, production)"
+  type        = string
+}
+
+variable "sector" {
+  description = "Sector identifier for the cluster (e.g., dev, test, prod)"
+  type        = string
+}
+
+# =============================================================================
 # ArgoCD Bootstrap Configuration Variables
 # =============================================================================
 

@@ -1,0 +1,17 @@
+# Add the rolebinding as workaround
+# Each HostedCluster will have several components need the extension-apiserver-authentication-reader permission
+# Use system:authenticated till we can find better way to handle it
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: system:authenticated:extension-apiserver-authentication-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated

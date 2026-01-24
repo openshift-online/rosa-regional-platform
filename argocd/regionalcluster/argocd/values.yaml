@@ -1,0 +1,47 @@
+# ArgoCD chart configuration
+argocd:
+  chart_version: "9.3.4"
+
+# ArgoCD subchart configuration
+argo-cd:
+  enabled: true
+  # High availability configuration
+  ha:
+    enabled: true
+  # ArgoCD server configuration
+  server:
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    # Security configuration
+    insecure: false
+  # ArgoCD controller configuration
+  controller:
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+  # Repository server configuration
+  repoServer:
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+  # Redis configuration
+  redisSecretInit:
+    enabled: false # Ref: https://github.com/argoproj/argo-helm/issues/2887
+  # Global ArgoCD configuration parameters
+  configs:
+    params:
+      server.insecure: false
+
+# ArgoCD version is now managed via Chart.yaml dependencies

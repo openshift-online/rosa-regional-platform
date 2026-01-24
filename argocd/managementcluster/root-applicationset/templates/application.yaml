@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: root-appset
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  argocd.argoproj.io/secret-type: cluster
+          - git:
+              directories:
+                - path: argocd/{{ "{{" }}metadata.labels.cluster_type{{ "}}" }}cluster/*
+              repoURL: '{{ "{{" }}metadata.annotations.git_repo{{ "}}" }}'
+              revision: '{{ "{{" }}metadata.annotations.git_revision{{ "}}" }}'
+  template:
+    metadata:
+      name: '{{ "{{" }}path.basename{{ "}}" }}'
+      labels:
+        cluster_type: '{{ "{{" }}metadata.labels.cluster_type{{ "}}" }}'
+        environment: '{{ "{{" }}metadata.labels.environment{{ "}}" }}'
+        region: '{{ "{{" }}metadata.labels.region{{ "}}" }}'
+        sector: '{{ "{{" }}metadata.labels.sector{{ "}}" }}'
+    spec:
+      project: default
+      destination:
+        namespace: '{{ "{{" }}path.basename{{ "}}" }}'
+        server: '{{ "{{" }}server{{ "}}" }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true
+          - CreateNamespace=true
+      sources:
+        - helm:
+            valueFiles:
+              - values.yaml
+              - $values/argocd/rendered/{{ "{{" }}metadata.labels.environment{{ "}}" }}/{{ "{{" }}metadata.labels.sector{{ "}}" }}/{{ "{{" }}metadata.labels.region{{ "}}" }}/{{ "{{" }}metadata.labels.cluster_type{{ "}}" }}cluster-values.yaml
+            valuesObject:
+              global:
+                cluster_type: '{{ "{{" }}metadata.labels.cluster_type{{ "}}" }}'
+                environment: '{{ "{{" }}metadata.labels.environment{{ "}}" }}'
+                region: '{{ "{{" }}metadata.labels.region{{ "}}" }}'
+                sector: '{{ "{{" }}metadata.labels.sector{{ "}}" }}'
+          path: '{{ "{{" }}path{{ "}}" }}'
+          repoURL: '{{ "{{" }}metadata.annotations.git_repo{{ "}}" }}'
+          targetRevision: '{{ "{{" }}metadata.annotations.git_revision{{ "}}" }}'
+        - path: argocd/rendered/{{ "{{" }}metadata.labels.environment{{ "}}" }}/{{ "{{" }}metadata.labels.sector{{ "}}" }}/{{ "{{" }}metadata.labels.region{{ "}}" }}
+          ref: values
+          repoURL: '{{ "{{" }}metadata.annotations.git_repo{{ "}}" }}'
+          targetRevision: '{{ "{{" }}metadata.annotations.git_revision{{ "}}" }}'

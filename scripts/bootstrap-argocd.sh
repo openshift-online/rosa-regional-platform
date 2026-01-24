@@ -40,6 +40,12 @@ LOG_GROUP=$(echo "$OUTPUTS" | jq -r '.bootstrap_log_group_name.value')
 REPOSITORY_URL=$(echo "$OUTPUTS" | jq -r '.repository_url.value')
 REPOSITORY_BRANCH=$(echo "$OUTPUTS" | jq -r '.repository_branch.value')
 
+# Extract cluster metadata for bootstrap value injection
+ENVIRONMENT=$(echo "$OUTPUTS" | jq -r '.environment.value')
+SECTOR=$(echo "$OUTPUTS" | jq -r '.sector.value')
+REGION=$(echo "$OUTPUTS" | jq -r '.region.value')
+CLUSTER_TYPE_VALUE=$(echo "$OUTPUTS" | jq -r '.cluster_type.value')
+
 echo "Bootstrapping ArgoCD on cluster: $CLUSTER_NAME"
 
 # Run ECS task
@@ -57,7 +63,11 @@ RUN_TASK_OUTPUT=$(aws ecs run-task \
         {\"name\": \"ARGOCD_VERSION\", \"value\": \"9.3.4\"},
         {\"name\": \"REPOSITORY_URL\", \"value\": \"$REPOSITORY_URL\"},
         {\"name\": \"REPOSITORY_PATH\", \"value\": \"$REPOSITORY_PATH\"},
-        {\"name\": \"REPOSITORY_BRANCH\", \"value\": \"$REPOSITORY_BRANCH\"}
+        {\"name\": \"REPOSITORY_BRANCH\", \"value\": \"$REPOSITORY_BRANCH\"},
+        {\"name\": \"ENVIRONMENT\", \"value\": \"$ENVIRONMENT\"},
+        {\"name\": \"SECTOR\", \"value\": \"$SECTOR\"},
+        {\"name\": \"REGION\", \"value\": \"$REGION\"},
+        {\"name\": \"CLUSTER_TYPE\", \"value\": \"$CLUSTER_TYPE_VALUE\"}
       ]
     }]
   }" 2>&1)
