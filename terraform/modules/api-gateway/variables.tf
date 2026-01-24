@@ -27,6 +27,11 @@ variable "region_name" {
   type        = string
 }
 
+variable "node_security_group_id" {
+  description = "EKS node/pod security group ID - ALB needs to send traffic to pods via this SG. For EKS Auto Mode, use the cluster_primary_security_group_id."
+  type        = string
+}
+
 # =============================================================================
 # ALB and Target Group Configuration
 # =============================================================================

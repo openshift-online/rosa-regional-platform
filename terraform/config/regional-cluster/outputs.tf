@@ -40,6 +40,11 @@ output "cluster_security_group_id" {
   value       = module.regional_cluster.cluster_security_group_id
 }
 
+output "node_security_group_id" {
+  description = "EKS node/pod security group ID (Auto Mode primary SG)"
+  value       = module.regional_cluster.node_security_group_id
+}
+
 # Resource naming
 output "resource_name_base" {
   description = "Base name for resources (cluster_type-random_suffix)"
@@ -155,4 +160,42 @@ output "api_alb_security_group_id" {
 output "api_test_command" {
   description = "awscurl command to test the API"
   value       = module.api_gateway.test_command
+}
+
+# =============================================================================
+# AWS Load Balancer Controller Outputs
+# =============================================================================
+
+output "lbc_iam_role_arn" {
+  description = "IAM role ARN for AWS Load Balancer Controller"
+  value       = aws_iam_role.aws_lbc.arn
+}
+
+output "lbc_iam_role_name" {
+  description = "IAM role name for AWS Load Balancer Controller"
+  value       = aws_iam_role.aws_lbc.name
+}
+
+output "lbc_iam_policy_arn" {
+  description = "IAM policy ARN for AWS Load Balancer Controller"
+  value       = aws_iam_policy.aws_lbc.arn
+}
+
+output "lbc_helm_install_command" {
+  description = "Helm command to install AWS Load Balancer Controller (run from bastion)"
+  value       = <<-EOT
+    # Add EKS Helm repo (one-time setup)
+    helm repo add eks https://aws.github.io/eks-charts
+    helm repo update
+
+    # Install/upgrade AWS Load Balancer Controller
+    helm upgrade --install aws-load-balancer-controller \
+      eks/aws-load-balancer-controller \
+      --namespace kube-system \
+      --set clusterName=${module.regional_cluster.cluster_name} \
+      --set vpcId=${module.regional_cluster.vpc_id} \
+      --set region=${var.region_name} \
+      --set serviceAccount.create=true \
+      --set serviceAccount.name=aws-load-balancer-controller
+  EOT
 }

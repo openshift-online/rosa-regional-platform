@@ -29,6 +29,11 @@ output "cluster_security_group_id" {
   value       = module.eks.cluster_security_group_id
 }
 
+output "node_security_group_id" {
+  description = "EKS node security group ID (for Auto Mode, this is the cluster primary SG)"
+  value       = module.eks.cluster_primary_security_group_id
+}
+
 output "cluster_arn" {
   description = "EKS cluster ARN"
   value       = module.eks.cluster_arn

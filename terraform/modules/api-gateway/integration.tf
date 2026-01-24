@@ -20,6 +20,7 @@ resource "aws_api_gateway_integration" "proxy" {
   integration_http_method = "ANY"
   connection_type         = "VPC_LINK"
   connection_id           = aws_apigatewayv2_vpc_link.main.id
+  integration_target      = aws_lb.frontend.arn # Required for VPC Link v2 + ALB
   uri                     = "http://${aws_lb.frontend.dns_name}/{proxy}"
 
   # Pass the path parameter through
@@ -48,6 +49,7 @@ resource "aws_api_gateway_integration" "root" {
   integration_http_method = "ANY"
   connection_type         = "VPC_LINK"
   connection_id           = aws_apigatewayv2_vpc_link.main.id
+  integration_target      = aws_lb.frontend.arn # Required for VPC Link v2 + ALB
   uri                     = "http://${aws_lb.frontend.dns_name}/"
 
   # Forward AWS IAM identity information to the backend

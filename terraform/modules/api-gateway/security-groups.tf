@@ -53,10 +53,27 @@ resource "aws_vpc_security_group_ingress_rule" "alb_from_vpc_link" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_targets" {
-  security_group_id = aws_security_group.alb.id
-  description       = "Allow traffic to target pods"
-  ip_protocol       = "tcp"
-  from_port         = var.target_port
-  to_port           = var.target_port
-  cidr_ipv4         = "0.0.0.0/0" # Pods can be anywhere in the VPC
+  security_group_id            = aws_security_group.alb.id
+  description                  = "Allow traffic to target pods"
+  ip_protocol                  = "tcp"
+  from_port                    = var.target_port
+  to_port                      = var.target_port
+  referenced_security_group_id = var.node_security_group_id
+}
+
+# -----------------------------------------------------------------------------
+# Node Security Group Ingress Rule
+#
+# Allow ALB to send health checks and traffic to pods in the cluster.
+# For EKS Auto Mode, this must be added to the cluster_primary_security_group_id
+# (not the cluster_security_group_id) because that's what nodes/pods actually use.
+# -----------------------------------------------------------------------------
+
+resource "aws_vpc_security_group_ingress_rule" "nodes_from_alb" {
+  security_group_id            = var.node_security_group_id
+  description                  = "Allow ALB health checks and traffic to pods"
+  ip_protocol                  = "tcp"
+  from_port                    = var.target_port
+  to_port                      = var.target_port
+  referenced_security_group_id = aws_security_group.alb.id
 }
