@@ -46,3 +46,23 @@ repository_branch = "main"
 
 # AWS region name (required for API Gateway URL construction)
 region_name = "test"
+
+# Maestro Infrastructure Configuration
+
+# =============================================================================
+# Configuration for Maestro MQTT-based orchestration between regional and
+# management clusters
+
+# List of management cluster IDs that will connect via Maestro
+# These IDs are used to create IoT Things, certificates, and secrets
+management_cluster_ids = ["management-01"]
+
+# Database configuration
+maestro_db_instance_class = "db.t4g.micro"  # Use db.t4g.small or larger for production
+
+# High availability and protection (recommended for production)
+maestro_db_multi_az           = false  # Set to true for production
+maestro_db_deletion_protection = false  # Set to true for production
+
+# MQTT topic prefix for Maestro communication
+maestro_mqtt_topic_prefix = "maestro/consumers"

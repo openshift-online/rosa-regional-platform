@@ -151,6 +151,7 @@ resource "aws_ecs_task_definition" "bastion" {
             which \
             procps-ng \
             bind-utils \
+            postgresql15 \
             2>/dev/null
 
           # Install AWS CLI v2

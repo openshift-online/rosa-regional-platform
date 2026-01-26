@@ -69,3 +69,34 @@ module "api_gateway" {
   node_security_group_id = module.regional_cluster.node_security_group_id
   cluster_name           = module.regional_cluster.cluster_name
 }
+
+# Maestro Infrastructure Module
+# =============================================================================
+
+# Call the Maestro infrastructure module for MQTT-based orchestration
+module "maestro_infrastructure" {
+  source = "../../modules/maestro-infrastructure"
+
+  # Required variables from EKS cluster
+  resource_name_base            = module.regional_cluster.resource_name_base
+  vpc_id                        = module.regional_cluster.vpc_id
+  private_subnets               = module.regional_cluster.private_subnets
+  eks_cluster_name              = module.regional_cluster.cluster_name
+  eks_cluster_security_group_id = module.regional_cluster.cluster_security_group_id
+
+  # Bastion access (if enabled)
+  bastion_security_group_id = var.enable_bastion ? module.bastion[0].security_group_id : null
+
+  # Management cluster configuration
+  management_cluster_count       = length(var.management_cluster_ids)
+  management_cluster_ids         = var.management_cluster_ids
+  management_cluster_account_ids = var.management_cluster_account_ids
+
+  # Database configuration (adjust for production)
+  db_instance_class      = var.maestro_db_instance_class
+  db_multi_az           = var.maestro_db_multi_az
+  db_deletion_protection = var.maestro_db_deletion_protection
+
+  # MQTT topic prefix
+  mqtt_topic_prefix = var.maestro_mqtt_topic_prefix
+}

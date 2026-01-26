@@ -1,0 +1,78 @@
+---
+# HTTP Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: maestro-http
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "maestro-server.labels" . | nindent 4 }}
+    service: http
+spec:
+  type: {{ .Values.service.http.type }}
+  selector:
+    {{- include "maestro-server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.http.port }}
+      targetPort: {{ .Values.maestro.httpBindPort }}
+      protocol: TCP
+---
+# gRPC Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: maestro-grpc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "maestro-server.labels" . | nindent 4 }}
+    service: grpc
+spec:
+  type: {{ .Values.service.grpc.type }}
+  selector:
+    {{- include "maestro-server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: grpc
+      port: {{ .Values.service.grpc.port }}
+      targetPort: {{ .Values.maestro.grpcBindPort }}
+      protocol: TCP
+---
+# Health Check Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: maestro-health
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "maestro-server.labels" . | nindent 4 }}
+    service: health
+spec:
+  type: {{ .Values.service.health.type }}
+  selector:
+    {{- include "maestro-server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: health
+      port: {{ .Values.service.health.port }}
+      targetPort: {{ .Values.maestro.healthCheckBindPort }}
+      protocol: TCP
+---
+# Metrics Service
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: maestro-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "maestro-server.labels" . | nindent 4 }}
+    service: metrics
+spec:
+  type: {{ .Values.service.metrics.type }}
+  selector:
+    {{- include "maestro-server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.service.metrics.port }}
+      targetPort: {{ .Values.maestro.httpBindPort }}
+      protocol: TCP
+{{- end }}

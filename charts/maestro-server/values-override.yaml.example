@@ -1,0 +1,55 @@
+# =============================================================================
+# Maestro Server Helm Values Override - EXAMPLE
+# =============================================================================
+# This file contains cluster-specific and sensitive values that should NOT
+# be committed to Git.
+#
+# Usage:
+#   1. Copy this file to values-override.yaml:
+#      cp values-override.yaml.example values-override.yaml
+#
+#   2. Run the populate script to fill in values from Terraform:
+#      ./scripts/populate-maestro-values.sh
+#
+#   3. Or manually fill in the values below
+#
+#   4. Deploy with both values files:
+#      helm upgrade --install maestro-server ./charts/maestro-server \
+#        -f charts/maestro-server/values.yaml \
+#        -f charts/maestro-server/values-override.yaml
+#
+# NOTE: values-override.yaml is in .gitignore and will NEVER be committed
+# =============================================================================
+
+# AWS Pod Identity - IAM role for Maestro Server
+# Get from: terraform output maestro_server_role_arn
+aws:
+  podIdentity:
+    roleArn: "arn:aws:iam::ACCOUNT_ID:role/CLUSTER_NAME-maestro-server"
+
+# External Secrets - Secret names in AWS Secrets Manager
+# Get from: terraform output maestro_server_mqtt_cert_secret_name
+#           terraform output maestro_db_credentials_secret_name
+externalSecrets:
+  mqttCertSecretName: "CLUSTER_NAME/maestro/server-mqtt-cert"
+  dbCredentialsSecretName: "CLUSTER_NAME/maestro/db-credentials"
+
+# Optional: Override image for testing
+# image:
+#   registry: "quay.io"
+#   repository: "redhat-user-workloads/maestro-rhtap-tenant/maestro/maestro"
+#   tag: "your-test-tag"
+
+# Optional: Override region if different from default
+# externalSecrets:
+#   region: "us-west-2"
+
+# Optional: Override resource requests/limits for your cluster
+# deployment:
+#   replicas: 3
+#   requests:
+#     cpu: "500m"
+#     memory: "1Gi"
+#   limits:
+#     cpu: "2000m"
+#     memory: "2Gi"

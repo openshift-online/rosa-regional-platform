@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: maestro-agent-mqtt-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "maestro-agent.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # MQTT Broker Configuration for AWS IoT Core
+    brokerHost: "{{ .Values.broker.endpoint }}:8883"
+    username: ""
+    password: ""
+    # Certificate files mounted via ASCP CSI driver
+    clientCertFile: /mnt/secrets-store/certificate
+    clientKeyFile: /mnt/secrets-store/privateKey
+    caFile: /mnt/secrets-store/ca.crt
+    topics:
+      # Agent subscribes to sourceevents for this specific cluster
+      sourceEvents: sources/{{ .Values.broker.topicPrefix }}/{{ .Values.maestro.consumerName }}/sourceevents
+      # Agent publishes agentevents back to server
+      agentEvents: sources/{{ .Values.broker.topicPrefix }}/{{ .Values.maestro.consumerName }}/agentevents

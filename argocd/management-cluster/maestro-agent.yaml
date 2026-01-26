@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: maestro-agent
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"  # Deploy after ASCP CSI driver (wave 0)
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/openshift-online/rosa-regional-platform
+    path: charts/maestro-agent
+    targetRevision: main  # Change to your branch during development
+    helm:
+      releaseName: maestro-agent
+      valueFiles:
+        - values.yaml
+      # Note: values-override.yaml is not committed to Git
+      # It must be generated using scripts/populate-maestro-agent-values.sh
+      # and deployed separately or injected via a ConfigMap
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: maestro
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  # Ignore differences in Secret data since secrets are managed by ASCP CSI driver
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data

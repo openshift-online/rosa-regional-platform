@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maestro-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "maestro-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.deployment.replicas }}
+  selector:
+    matchLabels:
+      {{- include "maestro-agent.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "maestro-agent.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "maestro-agent.serviceAccountName" . }}
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "maestro-agent.fullname" . }}-secrets
+        - name: mqtt-config
+          configMap:
+            name: maestro-agent-mqtt-config
+      # No init container - agent doesn't need database
+      containers:
+        - name: agent
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+            - name: mqtt-config
+              mountPath: /config
+              readOnly: true
+          env:
+            {{- if .Values.tracing.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.tracing.address | quote }}
+            - name: OTEL_TRACES_EXPORTER
+              value: {{ .Values.tracing.exporter | quote }}
+            {{- end }}
+            - name: AMS_ENV
+              value: "production"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          command:
+            - /usr/local/bin/maestro
+            - agent
+            - --consumer-name={{ .Values.maestro.consumerName }}
+            - --workload-source-driver=mqtt
+            - --workload-source-config=/config/config.yaml
+            - --cloudevents-client-id={{ .Values.maestro.consumerName }}-work-agent
+            - --disable-leader-election={{ if eq (int .Values.deployment.replicas) 1 }}true{{ else }}false{{ end }}
+            - -v={{ .Values.maestro.glog_v }}
+          resources:
+            requests:
+              cpu: {{ .Values.deployment.requests.cpu | quote }}
+              memory: {{ .Values.deployment.requests.memory | quote }}
+            limits:
+              cpu: {{ .Values.deployment.limits.cpu | quote }}
+              memory: {{ .Values.deployment.limits.memory | quote }}

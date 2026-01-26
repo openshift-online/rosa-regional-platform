@@ -122,3 +122,13 @@ output "bastion_ssm_port_forward_template" {
   description = "AWS CLI command template for SSM port forwarding (replace <TASK_ID> and <RUNTIME_ID>)"
   value       = var.enable_bastion ? module.bastion[0].ssm_port_forward_template : null
 }
+
+output "maestro_agent_mqtt_cert_secret_name" {                                                                                                                                              
+  description = "Secret name for Maestro Agent MQTT certificate"                                                                                                                            
+  value       = module.maestro_agent.maestro_agent_mqtt_cert_secret_name                                                                                                                    
+}                                                                                                                                                                                           
+                                                                                                                                                                                            
+output "maestro_agent_helm_values" {                                                                                                                                                        
+  description = "Helm values for Maestro Agent deployment"                                                                                                                                  
+  value       = module.maestro_agent.helm_values                                                                                                                                            
+}

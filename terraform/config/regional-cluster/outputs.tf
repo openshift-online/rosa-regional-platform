@@ -161,3 +161,98 @@ output "api_test_command" {
   description = "awscurl command to test the API"
   value       = module.api_gateway.test_command
 }
+
+# Maestro Infrastructure Outputs
+# =============================================================================
+
+# AWS IoT Core
+output "maestro_iot_mqtt_endpoint" {
+  description = "AWS IoT Core MQTT endpoint for Maestro broker connection"
+  value       = module.maestro_infrastructure.iot_mqtt_endpoint
+}
+
+output "maestro_server_thing_name" {
+  description = "AWS IoT Thing name for Maestro Server"
+  value       = module.maestro_infrastructure.maestro_server_thing_name
+}
+
+output "maestro_agent_thing_names" {
+  description = "Map of management cluster IDs to AWS IoT Thing names"
+  value       = module.maestro_infrastructure.maestro_agent_thing_names
+}
+
+# RDS Database
+output "maestro_rds_endpoint" {
+  description = "Maestro RDS PostgreSQL endpoint (hostname:port)"
+  value       = module.maestro_infrastructure.rds_endpoint
+}
+
+output "maestro_rds_address" {
+  description = "Maestro RDS PostgreSQL hostname"
+  value       = module.maestro_infrastructure.rds_address
+}
+
+output "maestro_rds_port" {
+  description = "Maestro RDS PostgreSQL port"
+  value       = module.maestro_infrastructure.rds_port
+}
+
+# Secrets Manager
+output "maestro_server_mqtt_cert_secret_name" {
+  description = "Secrets Manager secret name for Maestro Server MQTT certificate"
+  value       = module.maestro_infrastructure.maestro_server_mqtt_cert_secret_name
+}
+
+output "maestro_db_credentials_secret_name" {
+  description = "Secrets Manager secret name for Maestro database credentials"
+  value       = module.maestro_infrastructure.maestro_db_credentials_secret_name
+}
+
+# IAM Roles
+output "maestro_server_role_arn" {
+  description = "IAM role ARN for Maestro Server (Pod Identity)"
+  value       = module.maestro_infrastructure.maestro_server_role_arn
+}
+
+# Agent Certificate Data (SENSITIVE - For Manual Transfer to Management Clusters)
+output "maestro_agent_certificates" {
+  description = "MQTT certificate data for each management cluster - MANUALLY transfer to management cluster operators (SENSITIVE)"
+  sensitive   = true
+  value       = module.maestro_infrastructure.maestro_agent_certificates
+}
+
+# Configuration Summary
+output "maestro_configuration_summary" {
+  description = "Complete Maestro configuration for use in Helm values"
+  value       = module.maestro_infrastructure.maestro_configuration_summary
+  sensitive   = false
+}
+
+# Agent Configuration Helper (for management cluster setup)
+output "maestro_agent_setup_instructions" {
+  description = "Instructions for setting up Maestro Agent in each management cluster"
+  value = {
+    for cluster_id in var.management_cluster_ids : cluster_id => {
+      # Step 1: Extract certificate data from regional cluster
+      step_1_extract_certificate = "terraform output -json maestro_agent_certificates | jq '.[\"${cluster_id}\"]' > ${cluster_id}-maestro-cert.json"
+
+      # Step 2: Securely transfer to management cluster operator
+      step_2_transfer_instructions = "See docs/maestro-manual-cert-transfer.md for secure transfer options"
+
+      # Step 3: Management cluster creates secret and IAM role
+      step_3_management_terraform = "See terraform/config/management-cluster/maestro-agent.tf.example"
+
+      # Step 4: Deploy Maestro Agent with Helm
+      step_4_helm_values = {
+        consumerName = cluster_id
+        iot_endpoint = module.maestro_infrastructure.iot_mqtt_endpoint
+      }
+
+      # IoT Thing created in regional account
+      iot_thing_name = module.maestro_infrastructure.maestro_agent_thing_names[cluster_id]
+
+      # Guide reference
+      documentation = "docs/maestro-manual-cert-transfer.md"
+    }
+  }
+}

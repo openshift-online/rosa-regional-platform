@@ -7,3 +7,8 @@
 *.terraform.lock.hcl
 *.zip
 bastion_task.json
+
+# Maestro Helm chart overrides (contains cluster-specific secrets)
+charts/*/values-override*.yaml
+charts/*/values-local*.yaml
+!charts/*/values-override.yaml.example

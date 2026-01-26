@@ -1,0 +1,27 @@
+{
+  "apiVersion": "work.open-cluster-management.io/v1",
+  "kind": "ManifestWork",
+  "metadata": {
+    "name": "test-configmap"
+  },
+  "spec": {
+    "workload": {
+      "manifests": [
+        {
+          "apiVersion": "v1",
+          "kind": "ConfigMap",
+          "metadata": {
+            "name": "hello-from-maestro",
+            "namespace": "default"
+          },
+          "data": {
+            "message": "Hello from Maestro Server via MQTT - Test 2!",
+            "cluster_id": "management-01",
+            "timestamp": "2026-01-23T13:20:00Z",
+            "test_run": "mqtt-connectivity-test"
+          }
+        }
+      ]
+    }
+  }
+}

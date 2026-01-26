@@ -58,3 +58,11 @@ module "bastion" {
   vpc_id                    = module.management_cluster.vpc_id
   private_subnet_ids        = module.management_cluster.private_subnets
 }
+
+module "maestro_agent" {                                                                                                                                                                    
+  source = "../../modules/maestro-agent"                                                                                                                                                    
+                                                                                                                                                                                            
+  cluster_id              = var.cluster_id                                                                                                                                                  
+  regional_aws_account_id = var.regional_aws_account_id                                                                                                                                     
+  eks_cluster_name        = module.management_cluster.cluster_name                                                                                                                          
+}

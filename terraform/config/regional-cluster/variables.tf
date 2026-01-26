@@ -55,3 +55,42 @@ variable "region_name" {
   description = "AWS region name for API Gateway URL construction (e.g., 'us-west-2')"
   type        = string
 }
+
+# Maestro Configuration Variables
+# =============================================================================
+
+variable "management_cluster_ids" {
+  description = "List of management cluster IDs that will connect to this regional cluster via Maestro"
+  type        = list(string)
+  default     = ["management-01"]
+}
+
+variable "management_cluster_account_ids" {
+  description = "List of AWS account IDs where management clusters run (CRITICAL for cross-account access). If management clusters are in different AWS accounts, add those account IDs here to enable cross-account IAM trust and Secrets Manager access. Leave empty if management clusters are in the same account as regional cluster."
+  type        = list(string)
+  default     = []
+}
+
+variable "maestro_db_instance_class" {
+  description = "RDS instance class for Maestro PostgreSQL database"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "maestro_db_multi_az" {
+  description = "Enable Multi-AZ deployment for Maestro RDS (recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "maestro_db_deletion_protection" {
+  description = "Enable deletion protection for Maestro RDS instance (recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "maestro_mqtt_topic_prefix" {
+  description = "Prefix for MQTT topics used by Maestro"
+  type        = string
+  default     = "maestro/consumers"
+}

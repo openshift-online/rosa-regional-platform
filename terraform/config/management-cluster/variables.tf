@@ -46,3 +46,25 @@ variable "enable_bastion" {
   type        = bool
   default     = false
 }
+
+# =============================================================================
+# Maestro Configuration Variables
+# =============================================================================
+
+variable "cluster_id" {
+  description = "Logical cluster ID for Maestro registration (must match entry in regional cluster's management_cluster_ids)"
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z0-9-]+$", var.cluster_id))
+    error_message = "cluster_id must contain only lowercase letters, numbers, and hyphens"
+  }
+}
+
+variable "regional_aws_account_id" {
+  description = "AWS account ID where the regional cluster and IoT Core are hosted"
+  type        = string
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.regional_aws_account_id))
+    error_message = "regional_aws_account_id must be a 12-digit AWS account ID"
+  }
+}
