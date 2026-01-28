@@ -20,9 +20,9 @@ phases:
 
   build:
     commands:
-      - echo "Starting Orchestration..."
-      - echo "Repository ID: $REPOSITORY_ID"
-      - echo "Branch Name: $BRANCH_NAME"
+      - echo "Starting Orchestration"
+      - echo "Repository ID - $REPOSITORY_ID"
+      - echo "Branch Name - $BRANCH_NAME"
       - python3 terraform/config/region-deploy/scripts/orchestrate_deploy.py
 
   post_build:

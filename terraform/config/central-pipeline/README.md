@@ -1,16 +1,31 @@
 # Central Pipeline Infrastructure
 
-This directory contains the Terraform configuration for the centralized CI/CD pipeline that drives the entire Regional Platform.
+This directory contains the Terraform configuration for the **Central Pipeline** - the top-tier pipeline that deploys Regional Clusters across multiple AWS regions.
+
+## Scope
+
+**The Central Pipeline is responsible for:**
+- ✅ Minting Regional AWS Accounts (via AWS Organizations)
+- ✅ Deploying Regional Clusters (EKS with CLM, Maestro, Frontend API)
+- ✅ Bootstrapping Regional Pipelines (one per region)
+
+**The Central Pipeline is NOT responsible for:**
+- ❌ Deploying Management Clusters (handled by Regional Pipelines)
+- ❌ Customer control plane hosting
+- ❌ Day-to-day capacity scaling
+
+**See [Pipeline Architecture](../../docs/pipeline-architecture.md) for the complete two-tier pipeline design.**
 
 ## Architecture
 
-The pipeline uses **AWS CodePipeline** and **AWS CodeBuild** to orchestrate the deployment of the platform.
+The pipeline uses **AWS CodePipeline** and **AWS CodeBuild** running in the **Central AWS Account**.
 
 1.  **Source:** Listens for changes on the specified branch of the GitHub repository (via CodeStar Connection).
 2.  **Build/Deploy:**
-    *   Runs the `terraform/region-deploy/scripts/orchestrate_deploy.py` script.
-    *   Mints/Updates AWS Accounts based on `region-deploy` configuration.
-    *   Provisions/Updates Management and Regional clusters inside those accounts.
+    *   Runs the `terraform/config/region-deploy/scripts/orchestrate_deploy.py` script.
+    *   Mints/Updates Regional AWS Accounts based on `region-deploy/regions/*.yaml` configuration.
+    *   Provisions/Updates **Regional Clusters only** inside those accounts.
+    *   Bootstraps Regional Pipeline infrastructure in each Regional Account.
 
 ## Resources Created
 
@@ -42,19 +57,52 @@ Before deploying this pipeline, you must have:
 
 **Note:** The CodeStar connection to GitHub will be created automatically by Terraform, but it requires manual activation in the AWS Console after creation (see Post-Deployment Setup below).
 
-## Deployment
+## Bootstrap Process
 
-To deploy this pipeline for the first time:
+The Central Pipeline is deployed **manually** as a one-time bootstrap operation in the Management/Central AWS Account.
+
+### Quick Start
+
+From the repository root, run:
 
 ```bash
-cd terraform/config/central-pipeline
-terraform init
-terraform apply \
-  -var="repository_id=owner/repo-name" \
-  -var="branch_name=main"
+make central-bootstrap
 ```
 
-Replace `owner/repo-name` with your GitHub repository (e.g., `openshift-online/rosa-regional-platform`).
+This interactive command will:
+- Prompt for repository ID and branch name
+- Display current AWS identity
+- Deploy Central Pipeline infrastructure
+- Show post-deployment steps
+
+### Manual Deployment (Advanced)
+
+If you prefer to run Terraform directly:
+
+1. **Ensure Prerequisites**:
+   - Running in AWS Organizations Management Account
+   - AWS CLI configured with admin credentials
+   - Terraform installed (>= 1.5)
+
+2. **Deploy Central Pipeline** (first time, uses local state):
+   ```bash
+   cd terraform/config/central-pipeline
+   terraform init
+   terraform apply \
+     -var="repository_id=owner/repo-name" \
+     -var="branch_name=main"
+   ```
+
+   Replace `owner/repo-name` with your GitHub repository (e.g., `openshift-online/rosa-regional-platform`).
+
+3. **Note Outputs**:
+   ```bash
+   terraform output central_pipeline_state_bucket
+   terraform output tf_state_bucket
+   terraform output codestar_connection_arn
+   ```
+
+4. **Complete Post-Deployment Setup** (see below)
 
 ## Inputs
 
