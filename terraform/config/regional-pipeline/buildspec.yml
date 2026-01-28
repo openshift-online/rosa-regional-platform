@@ -1,0 +1,34 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    TF_VERSION: "1.14.4"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing Terraform..."
+      - curl -s -qL -o terraform.zip https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+      - unzip -o terraform.zip
+      - mv terraform /usr/local/bin/
+      - terraform --version
+      - echo "Installing Python dependencies..."
+      - pip install boto3
+
+  build:
+    commands:
+      - echo "Starting Management Cluster Deployment..."
+      - echo "Region: $AWS_REGION"
+      - echo "Management State Bucket: $MANAGEMENT_STATE_BUCKET"
+      - echo "Central State Bucket: $CENTRAL_STATE_BUCKET"
+      - |
+        # This script will be similar to orchestrate_deploy.py
+        # but focuses only on Management clusters in this region
+        python3 terraform/config/regional-pipeline/scripts/orchestrate_regional_deploy.py
+
+  post_build:
+    commands:
+      - echo "Management Cluster Deployment Complete."
