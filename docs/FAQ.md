@@ -97,11 +97,75 @@ If the MC API is non-responsive, we will have observability alerts to notify SRE
 
 - Regions are deployed on demand (gitops) via pipelines **fully automatically**
 - Process:
-  1. Add region configuration to the Git repository
-  2. Regional Cluster Provisioning pipeline runs to provision the Regional Cluster
-  3. ArgoCD is installed
-  4. Frontend API, CLM, Maestro, Tekton are then installed via ArgoCD
-  5. The RC will in turn provision Management Clusters as needed via the MC Provisioning pipelines
+  1. Add region configuration YAML to `terraform/config/region-deploy/regions/`
+  2. Central Pipeline triggers on Git push
+  3. Central Pipeline mints Regional AWS account via Organizations API
+  4. Central Pipeline deploys Regional Cluster (EKS) with core services
+  5. Central Pipeline bootstraps Regional Pipeline in the Regional account
+  6. Regional Pipeline is ready to provision Management Clusters as capacity is needed
+
+### What is the difference between Central Pipeline and Regional Pipeline?
+
+The architecture uses a **two-tier pipeline system** for security isolation and operational autonomy:
+
+**Central Pipeline** (runs in Management/Central Account):
+- **Scope**: Organization-wide, cross-regional
+- **Triggers**: Infrastructure-as-Code changes (rare)
+- **Responsibilities**:
+  - Mint Regional AWS accounts via Organizations API
+  - Deploy Regional Clusters (EKS with CLM, Maestro, API)
+  - Bootstrap Regional Pipelines
+- **Permissions**: High-risk org-wide permissions (CreateAccount, MoveAccount)
+- **Location**: Central/Management AWS account
+- **Blast Radius**: High (entire organization)
+
+**Regional Pipeline** (runs in each Regional Account):
+- **Scope**: Single-region, Management cluster provisioning
+- **Triggers**: Capacity scaling, Git changes (frequent)
+- **Responsibilities**:
+  - Mint Management AWS accounts (same region only)
+  - Deploy Management Clusters (EKS with HyperShift)
+  - Scale Management cluster capacity independently
+- **Permissions**: Region-scoped, more restrictive
+- **Location**: Each Regional AWS Account
+- **Blast Radius**: Low (single region only)
+
+**Why Separate?**
+1. **Blast Radius Isolation**: Regional Pipeline failure only affects one region
+2. **Regional Autonomy**: Each region can scale Management clusters independently
+3. **Security Separation**: Central Pipeline has dangerous org-wide permissions, Regional Pipeline does not
+4. **Operational Flexibility**: Different cadences for Regional vs Management deployments
+
+### How does Management Cluster provisioning work?
+
+When the Regional Pipeline runs:
+
+1. **Reads Management cluster definitions** from `terraform/config/management-deploy/clusters/*.yaml`
+2. **Filters for current region** (e.g., only `us-east-1` Management clusters)
+3. **Mints Management AWS accounts** via Organizations API
+4. **Assumes ManagementClusterDeployRole** in each Management account (with External ID)
+5. **Deploys Management Cluster** via `make pipeline-provision-management`
+6. **Registers with CLM** for capacity tracking
+
+Each Regional Pipeline operates independently and only provisions Management clusters in its own region.
+
+### What security controls prevent Regional Pipeline from affecting other regions?
+
+Regional Pipeline has several layers of security controls:
+
+1. **Region-Scoped Permissions**: IAM conditions enforce `aws:RequestedRegion = <region>`
+2. **Restricted AssumeRole**: Uses ManagementClusterDeployRole (NOT OrganizationAccountAccessRole)
+3. **External ID Requirement**: Cross-account assumption requires `sts:ExternalId = "regional-pipeline-{region}"`
+4. **Limited IAM Permissions**: Can only create EKS/EC2 service roles, not arbitrary IAM
+5. **Read-Only Central Access**: Can read management-deploy state, cannot write to Central bucket
+6. **S3 Bucket Isolation**: Management state bucket only accessible from Regional Account
+
+These controls ensure a compromised Regional Pipeline cannot:
+- ❌ Affect resources in other regions
+- ❌ Create accounts outside its region
+- ❌ Access other Regional Pipeline states
+- ❌ Modify Central Pipeline infrastructure
+- ❌ Assume roles in Regional Clusters
 
 ### Should we use AWS Landing Zone for region setup?
 
