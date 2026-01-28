@@ -18,6 +18,37 @@ resource "aws_codestarconnections_connection" "github" {
 # S3 Buckets
 # =============================================================================
 
+# Central Pipeline State Bucket (for storing central-pipeline's own state)
+resource "aws_s3_bucket" "central_pipeline_state" {
+  bucket_prefix = "central-pipeline-state-"
+}
+
+resource "aws_s3_bucket_versioning" "central_pipeline_state" {
+  bucket = aws_s3_bucket.central_pipeline_state.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "central_pipeline_state" {
+  bucket = aws_s3_bucket.central_pipeline_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "central_pipeline_state" {
+  bucket = aws_s3_bucket.central_pipeline_state.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # Artifacts Bucket
 resource "aws_s3_bucket" "artifacts" {
   bucket_prefix = "pipeline-artifacts-"
@@ -30,6 +61,25 @@ resource "aws_s3_bucket_versioning" "artifacts" {
   }
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # Terraform State Bucket for Regional Clusters
 resource "aws_s3_bucket" "tf_state" {
   bucket_prefix = "regional-cluster-tf-state-"
@@ -40,6 +90,25 @@ resource "aws_s3_bucket_versioning" "tf_state" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "tf_state" {
+  bucket = aws_s3_bucket.tf_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "tf_state" {
+  bucket = aws_s3_bucket.tf_state.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 # Allow Organization Member Accounts to access the State Bucket
