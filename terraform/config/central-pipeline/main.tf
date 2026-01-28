@@ -414,6 +414,16 @@ resource "aws_codebuild_project" "deploy" {
       name  = "TF_BACKEND_REGION"
       value = var.region
     }
+
+    environment_variable {
+      name  = "REPOSITORY_ID"
+      value = var.repository_id
+    }
+
+    environment_variable {
+      name  = "BRANCH_NAME"
+      value = var.branch_name
+    }
   }
 
   source {
