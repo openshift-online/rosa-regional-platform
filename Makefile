@@ -195,9 +195,9 @@ install-cloud-nuke:
 
 # Dry run cloud-nuke to see what resources would be deleted
 cloud-nuke-dry-run:
-	@./scripts/cloud-nuke.py --dry-run --region $${AWS_REGION:-us-east-1}
+	@DISABLE_TELEMETRY=true ./scripts/cloud-nuke.py --dry-run --region $${AWS_REGION:-us-east-1}
 
 # Run cloud-nuke to delete AWS resources
 cloud-nuke:
-	@./scripts/cloud-nuke.py --region $${AWS_REGION:-us-east-1}
+	@DISABLE_TELEMETRY=true ./scripts/cloud-nuke.py --region $${AWS_REGION:-us-east-1}
 

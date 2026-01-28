@@ -75,6 +75,9 @@ def run_cloud_nuke(credentials, region, dry_run=False, timeout="30m"):
     if credentials.get('SessionToken'):
         env['AWS_SESSION_TOKEN'] = credentials['SessionToken']
 
+    # Disable telemetry by default (can be overridden by environment)
+    env.setdefault('DISABLE_TELEMETRY', 'true')
+
     # Calculate absolute path to config file
     script_dir = Path(__file__).parent.absolute()
     config_path = script_dir.parent / 'configs' / 'cloud-nuke.yaml'

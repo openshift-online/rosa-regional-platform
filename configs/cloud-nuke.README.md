@@ -77,6 +77,7 @@ The `scripts/cloud-nuke.py` wrapper script:
 - Uses the configuration file from this directory
 - Streams output to stderr for better visibility
 - Supports both dry-run and destructive modes
+- Disables telemetry by default (`DISABLE_TELEMETRY=true`)
 
 ## Safety Features
 
