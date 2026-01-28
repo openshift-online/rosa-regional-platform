@@ -85,6 +85,28 @@ provision-regional:
 	@echo "Bootstrapping argocd..."
 	@scripts/bootstrap-argocd.sh regional
 
+# Pipeline provision management (Non-interactive, assumes init run externally)
+pipeline-provision-management:
+	@echo "🚀 Pipeline Provisioning management cluster..."
+	@echo ""
+	@echo "📍 Terraform Directory: terraform/config/management-cluster"
+	@cd terraform/config/management-cluster && \
+		terraform apply -auto-approve
+	@echo ""
+	@echo "Bootstrapping argocd..."
+	@scripts/bootstrap-argocd.sh management
+
+# Pipeline provision regional (Non-interactive, assumes init run externally)
+pipeline-provision-regional:
+	@echo "🚀 Pipeline Provisioning regional cluster..."
+	@echo ""
+	@echo "📍 Terraform Directory: terraform/config/regional-cluster"
+	@cd terraform/config/regional-cluster && \
+		terraform apply -auto-approve
+	@echo ""
+	@echo "Bootstrapping argocd..."
+	@scripts/bootstrap-argocd.sh regional
+
 # Destroy management cluster and all resources
 destroy-management:
 	@echo "🗑️  Destroying management cluster..."
