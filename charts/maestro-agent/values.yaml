@@ -36,7 +36,7 @@ broker:
 
 # AWS configuration
 aws:
-  region: "us-east-1"  # Match regional cluster region
+  region: ""  # Populated from current AWS profile via values-override.yaml
 
 # ASCP CSI Driver configuration
 ascp:

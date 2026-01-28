@@ -21,9 +21,11 @@
 # NOTE: values-override.yaml is in .gitignore and will NEVER be committed
 # =============================================================================
 
-# AWS Pod Identity - IAM role for Maestro Server
-# Get from: terraform output maestro_server_role_arn
+# AWS Configuration
+# REQUIRED - Get from: aws configure get region (auto-populated by script)
+# REQUIRED - Get from: terraform output maestro_server_role_arn
 aws:
+  region: "us-east-1"  # REQUIRED: Populated from AWS profile
   podIdentity:
     roleArn: "arn:aws:iam::ACCOUNT_ID:role/CLUSTER_NAME-maestro-server"
 
@@ -39,10 +41,6 @@ externalSecrets:
 #   registry: "quay.io"
 #   repository: "redhat-user-workloads/maestro-rhtap-tenant/maestro/maestro"
 #   tag: "your-test-tag"
-
-# Optional: Override region if different from default
-# externalSecrets:
-#   region: "us-west-2"
 
 # Optional: Override resource requests/limits for your cluster
 # deployment:

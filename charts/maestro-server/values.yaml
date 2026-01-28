@@ -44,14 +44,12 @@ broker:
   topicPrefix: "maestro/consumers"
 # AWS Pod Identity configuration
 aws:
+  region: ""  # Populated from current AWS profile via values-override.yaml
   podIdentity:
     enabled: true
     roleArn: ""  # Populated from Terraform output via values-override.yaml
 # External Secrets configuration
 externalSecrets:
-  enabled: true
-  region: "us-east-1"
-  secretStore: "aws-secrets-manager"
   # Secret names from Terraform outputs (populated via values-override.yaml)
   mqttCertSecretName: ""  # Will be: <cluster-name>/maestro/server-mqtt-cert
   dbCredentialsSecretName: ""  # Will be: <cluster-name>/maestro/db-credentials

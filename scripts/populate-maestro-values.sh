@@ -76,6 +76,16 @@ IOT_ENDPOINT=$(terraform output -raw maestro_iot_mqtt_endpoint 2>/dev/null || ec
 echo "  - Getting cluster name..."
 CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "unknown")
 
+echo "  - Detecting AWS region from profile..."
+AWS_REGION=$(aws configure get region 2>/dev/null)
+if [ -z "${AWS_REGION}" ]; then
+    echo -e "${RED}Error: Could not detect AWS region from AWS profile${NC}"
+    echo "Please configure your AWS CLI with a region:"
+    echo "  aws configure set region <your-region>"
+    exit 1
+fi
+echo "    Using region: ${AWS_REGION}"
+
 # Validate outputs
 if [ -z "${MQTT_SECRET_NAME}" ] || [ -z "${DB_SECRET_NAME}" ]; then
     echo -e "${RED}Error: Failed to retrieve required Terraform outputs${NC}"
@@ -101,7 +111,12 @@ cat > "${VALUES_FILE}" << EOF
 #
 # Generated: $(date)
 # Cluster: ${CLUSTER_NAME}
+# Region: ${AWS_REGION}
 # =============================================================================
+
+# AWS Configuration
+aws:
+  region: "${AWS_REGION}"
 
 # External Secrets - Secret names in AWS Secrets Manager
 externalSecrets:
