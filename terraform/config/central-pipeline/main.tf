@@ -6,6 +6,15 @@ data "aws_caller_identity" "current" {}
 data "aws_organizations_organization" "current" {}
 
 # =============================================================================
+# CodeStar Connection to GitHub
+# =============================================================================
+
+resource "aws_codestarconnections_connection" "github" {
+  name          = "github-connection"
+  provider_type = "GitHub"
+}
+
+# =============================================================================
 # S3 Buckets
 # =============================================================================
 
@@ -40,8 +49,8 @@ resource "aws_s3_bucket_policy" "tf_state_access" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowOrganizationAccess"
-        Effect = "Allow"
+        Sid       = "AllowOrganizationAccess"
+        Effect    = "Allow"
         Principal = "*"
         Action = [
           "s3:GetObject",
@@ -132,14 +141,14 @@ resource "aws_iam_role_policy" "codebuild_policy" {
       },
       # Service Linked Role creation (needed for Org account creation sometimes)
       {
-        Effect = "Allow"
-        Action = "iam:CreateServiceLinkedRole"
+        Effect   = "Allow"
+        Action   = "iam:CreateServiceLinkedRole"
         Resource = "*"
       },
       # Assume Role into Child Accounts
       {
-        Effect = "Allow"
-        Action = "sts:AssumeRole"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
         Resource = "arn:aws:iam::*:role/OrganizationAccountAccessRole"
       }
     ]
@@ -193,9 +202,9 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
         Resource = "*"
       },
       {
-        Effect = "Allow"
-        Action = "codestar-connections:UseConnection"
-        Resource = var.codestar_connection_arn
+        Effect   = "Allow"
+        Action   = "codestar-connections:UseConnection"
+        Resource = aws_codestarconnections_connection.github.arn
       }
     ]
   })
@@ -226,7 +235,7 @@ resource "aws_codebuild_project" "deploy" {
       name  = "TF_STATE_BUCKET"
       value = aws_s3_bucket.tf_state.bucket
     }
-    
+
     environment_variable {
       name  = "TF_BACKEND_REGION"
       value = var.region
@@ -264,7 +273,7 @@ resource "aws_codepipeline" "pipeline" {
       output_artifacts = ["source_output"]
 
       configuration = {
-        ConnectionArn    = var.codestar_connection_arn
+        ConnectionArn    = aws_codestarconnections_connection.github.arn
         FullRepositoryId = var.repository_id
         BranchName       = var.branch_name
       }
