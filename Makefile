@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional destroy-management destroy-regional test test-e2e
+.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional destroy-management destroy-regional test test-e2e cloud-nuke cloud-nuke-dry-run install-cloud-nuke
 
 # Default target
 help:
@@ -19,6 +19,11 @@ help:
 	@echo "🧪 Testing:"
 	@echo "  test                             - Run tests"
 	@echo "  test-e2e                         - Run end-to-end tests"
+	@echo ""
+	@echo "☢️  AWS Account Cleanup:"
+	@echo "  install-cloud-nuke               - Install cloud-nuke binary"
+	@echo "  cloud-nuke-dry-run               - Dry run cloud-nuke (shows what would be deleted)"
+	@echo "  cloud-nuke                       - Run cloud-nuke to delete AWS resources"
 	@echo ""
 	@echo "  help                             - Show this help message"
 
@@ -164,4 +169,35 @@ test:
 test-e2e:
 	@echo "🧪 Running end-to-end tests..."
 	@echo "✅ End-to-end tests complete"
+
+# =============================================================================
+# AWS Account Cleanup Targets
+# =============================================================================
+
+# Install cloud-nuke binary
+install-cloud-nuke:
+	@echo "🔧 Installing cloud-nuke..."
+	@if command -v cloud-nuke > /dev/null 2>&1; then \
+		echo "✅ cloud-nuke is already installed at $$(which cloud-nuke)"; \
+		cloud-nuke --version; \
+		exit 0; \
+	fi
+	@echo "📥 Downloading cloud-nuke..."
+	@CLOUD_NUKE_VERSION="v0.37.1" && \
+	TEMP_DIR=$$(mktemp -d) && \
+	trap "rm -rf $$TEMP_DIR" EXIT && \
+	wget -q -P "$$TEMP_DIR" "https://github.com/gruntwork-io/cloud-nuke/releases/download/$${CLOUD_NUKE_VERSION}/cloud-nuke_linux_amd64" && \
+	mv "$$TEMP_DIR/cloud-nuke_linux_amd64" "$$TEMP_DIR/cloud-nuke" && \
+	chmod +x "$$TEMP_DIR/cloud-nuke" && \
+	sudo mv "$$TEMP_DIR/cloud-nuke" /usr/local/bin/ && \
+	echo "✅ cloud-nuke installed successfully at /usr/local/bin/cloud-nuke" && \
+	cloud-nuke --version
+
+# Dry run cloud-nuke to see what resources would be deleted
+cloud-nuke-dry-run:
+	@./scripts/cloud-nuke.py --dry-run --region $${AWS_REGION:-us-east-1}
+
+# Run cloud-nuke to delete AWS resources
+cloud-nuke:
+	@./scripts/cloud-nuke.py --region $${AWS_REGION:-us-east-1}
 
