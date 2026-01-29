@@ -1,7 +1,10 @@
-.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional destroy-management destroy-regional test test-e2e new-region
+.PHONY: help central-bootstrap terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional destroy-management destroy-regional test test-e2e new-region
 
 # Default target
 help:
+	@echo "🏗️  Central Pipeline Bootstrap (One-Time Setup):"
+	@echo "  central-bootstrap                - Deploy Central Pipeline infrastructure (run once manually)"
+	@echo ""
 	@echo "🚀 Cluster Provisioning / Deprovisioning:"
 	@echo "  provision-management             - Provision management cluster environment (infra & argocd bootstrap)"
 	@echo "  provision-regional               - Provision regional cluster environment (infra & argocd bootstrap)"
@@ -43,6 +46,120 @@ terraform-upgrade:
 		terraform -chdir=$$dir init -upgrade -backend=false; \
 	done
 	@echo "✅ Terraform upgrade complete"
+
+# =============================================================================
+# Central Pipeline Bootstrap (One-Time Manual Setup)
+# =============================================================================
+
+# Bootstrap the Central Pipeline infrastructure (run once manually)
+central-bootstrap:
+	@echo "🏗️  Central Pipeline Bootstrap"
+	@echo "========================================================================"
+	@echo ""
+	@echo "⚠️  IMPORTANT: This is a ONE-TIME manual bootstrap process"
+	@echo ""
+	@echo "This will deploy the Central Pipeline infrastructure that:"
+	@echo "  • Creates AWS CodePipeline for Regional Cluster deployment"
+	@echo "  • Creates CodeStar connection to GitHub"
+	@echo "  • Creates S3 buckets for state and artifacts"
+	@echo "  • Sets up IAM roles with organization-wide permissions"
+	@echo ""
+	@echo "After deployment, the Central Pipeline will automatically:"
+	@echo "  • Monitor Git repository for Regional Cluster definitions"
+	@echo "  • Mint Regional AWS accounts"
+	@echo "  • Deploy Regional Clusters"
+	@echo "  • Bootstrap Regional Pipelines"
+	@echo ""
+	@echo "========================================================================"
+	@echo ""
+	@echo "📍 Terraform Directory: terraform/config/central-pipeline"
+	@echo ""
+	@echo "🔑 Target AWS Account:"
+	@echo "========================================================================"; \
+	aws sts get-caller-identity || { echo "❌ Failed to get AWS identity. Is AWS CLI configured?"; exit 1; }; \
+	echo "========================================================================"; \
+	echo ""; \
+	account_id=$$(aws sts get-caller-identity --query Account --output text); \
+	account_alias=$$(aws iam list-account-aliases --query 'AccountAliases[0]' --output text 2>/dev/null || echo "N/A"); \
+	region=$$(aws configure get region || echo "us-east-1"); \
+	echo "📋 Deployment Target:"; \
+	echo "   Account ID: $$account_id"; \
+	echo "   Account Alias: $$account_alias"; \
+	echo "   Region: $$region"; \
+	echo ""; \
+	echo "⚠️  WARNING: Central Pipeline will be deployed to the account above"; \
+	echo "⚠️  This account should be your AWS Central Account"; \
+	echo ""; \
+	read -p "Is this the correct AWS account? [y/N]: " account_confirm; \
+	if [ "$$account_confirm" != "y" ] && [ "$$account_confirm" != "Y" ]; then \
+		echo ""; \
+		echo "❌ Operation cancelled."; \
+		echo ""; \
+		echo "💡 To target a different account:"; \
+		echo "   1. Configure AWS CLI: aws configure"; \
+		echo "   2. Or use AWS profile: export AWS_PROFILE=<profile-name>"; \
+		echo "   3. Or assume a role: aws sts assume-role ..."; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	read -p "Enter GitHub repository ID (owner/repo-name): " repo_id; \
+	read -p "Enter branch name to monitor [main]: " branch_name; \
+	branch_name=$${branch_name:-main}; \
+	echo ""; \
+	echo "📝 Final Configuration:"; \
+	echo "   Repository: $$repo_id"; \
+	echo "   Branch: $$branch_name"; \
+	echo "   AWS Account: $$account_id"; \
+	echo "   AWS Region: $$region"; \
+	echo ""; \
+	read -p "Proceed with Central Pipeline deployment? [y/N]: " confirm; \
+	if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
+		echo "❌ Operation cancelled."; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "🚀 Step 1: Deploying Central Pipeline Infrastructure..."; \
+	echo "========================================================================"; \
+	cd terraform/config/central-pipeline && \
+		terraform init && \
+		terraform apply \
+			-var="repository_id=$$repo_id" \
+			-var="branch_name=$$branch_name"; \
+	if [ $$? -ne 0 ]; then \
+		echo ""; \
+		echo "❌ Central Pipeline deployment failed"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "✅ Central Pipeline infrastructure deployed successfully!"; \
+	echo ""; \
+	echo "📋 Post-Deployment Steps:"; \
+	echo "========================================================================"; \
+	echo ""; \
+	echo "1️⃣  ACTIVATE CODESTAR CONNECTION (REQUIRED):"; \
+	echo "   • Open AWS Console → Developer Tools → Connections"; \
+	echo "   • Find connection: github-connection"; \
+	echo "   • Click 'Update pending connection'"; \
+	echo "   • Authorize GitHub access"; \
+	echo ""; \
+	echo "2️⃣  MIGRATE TO REMOTE STATE (RECOMMENDED):"; \
+	echo "   • Edit: terraform/config/central-pipeline/backend.tf"; \
+	echo "   • Uncomment the S3 backend configuration"; \
+	echo "   • Update bucket name from Terraform outputs"; \
+	echo "   • Run: cd terraform/config/central-pipeline && terraform init -migrate-state"; \
+	echo ""; \
+	echo "3️⃣  ADD REGIONAL CLUSTER DEFINITIONS:"; \
+	echo "   • Create YAML files in: terraform/config/region-deploy/regions/"; \
+	echo "   • Example: us-east-1-regional.yaml"; \
+	echo "   • Git commit and push to trigger pipeline"; \
+	echo ""; \
+	echo "========================================================================"; \
+	echo ""; \
+	echo "📊 Pipeline Status:"; \
+	terraform output pipeline_url; \
+	echo ""; \
+	echo "🎉 Central Pipeline Bootstrap Complete!"; \
+	echo ""
 
 # =============================================================================
 # Cluster Provisioning/Deprovisioning Targets
