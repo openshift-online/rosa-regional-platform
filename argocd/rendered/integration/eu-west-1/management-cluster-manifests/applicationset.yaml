@@ -60,6 +60,9 @@ spec:
               cluster_type: '{{ .metadata.labels.cluster_type }}'
               environment: '{{ .metadata.labels.environment }}'
               region: '{{ .metadata.labels.region }}'
+            frontend-api:
+              targetGroup:
+                arn: '{{ .metadata.annotations.api_target_group_arn }}'
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'

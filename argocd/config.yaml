@@ -23,6 +23,21 @@ shards:
           externalDns:
             domain: "dev.eu-west-1.rosa.example.com"
 
+  - region: "us-east-2"
+    environment: "integration"
+    values:
+      regional-cluster:
+        maestro:
+          mqttEndpoint: "xxx.iot.us-east-2.amazonaws.com"
+        someOtherSetting: "value"
+      management-cluster:
+        hypershift:
+          oidcStorageS3Bucket:
+            name: "hypershift-mc-us-east-2"
+            region: "us-east-2"
+          externalDns:
+            domain: "dev.us-east-2.rosa.example.com"
+
   - region: "eu-west-1"
     environment: "staging"
     config_revision:

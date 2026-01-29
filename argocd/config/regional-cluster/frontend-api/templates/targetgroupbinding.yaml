@@ -1,0 +1,12 @@
+---
+apiVersion: eks.amazonaws.com/v1
+kind: TargetGroupBinding
+metadata:
+  name: {{ .Values.frontendApi.app.name }}
+  namespace: {{ .Values.frontendApi.namespace }}
+spec:
+  serviceRef:
+    name: {{ .Values.frontendApi.app.name }}
+    port: {{ .Values.frontendApi.service.ports.http }}
+  targetGroupARN: {{ .Values.frontendApi.targetGroup.arn }}
+  targetType: {{ .Values.frontendApi.targetGroup.targetType }}
