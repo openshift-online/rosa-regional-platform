@@ -1,0 +1,28 @@
+# cloud-nuke configuration file
+# This file defines which AWS resources to target for deletion
+
+# Regions to target (can be overridden via command line)
+regions:
+  - us-east-1
+  - us-west-2
+
+# Resource types to exclude from deletion
+# Uncomment and customize as needed
+exclude:
+  # resource-types:
+  #   - iam
+  #   - s3
+
+# Resource filters - exclude specific resources by name, tag, or other attributes
+# Uncomment and customize as needed
+# filters:
+#   s3:
+#     - property: name
+#       value: "do-not-delete-.*"
+#   ec2:
+#     - property: tag:Environment
+#       value: production
+
+# Time-based filtering - only delete resources older than this
+# Uncomment to enable
+# older-than: 24h
