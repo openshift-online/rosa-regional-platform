@@ -3,7 +3,7 @@ version: 0.2
 env:
   shell: bash
   variables:
-    TF_VERSION: "1.14.4"
+    TF_VERSION: "1.10.4"
 
 phases:
   install:
@@ -12,18 +12,16 @@ phases:
     commands:
       - echo "Installing Terraform..."
       - curl -s -qL -o terraform.zip https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
-      - unzip -o terraform.zip
-      - mv terraform /usr/local/bin/
+      - unzip -o terraform.zip -d /tmp
+      - mv /tmp/terraform /usr/local/bin/
       - terraform --version
       - echo "Installing Python dependencies..."
       - pip install boto3
 
   build:
     commands:
-      - echo "Starting Orchestration"
-      - echo "Repository ID - $REPOSITORY_ID"
-      - echo "Branch Name - $BRANCH_NAME"
-      - python3 terraform/config/region-deploy/scripts/orchestrate_deploy.py
+      - echo "Starting Orchestration..."
+      - python3 terraform/region-deploy/scripts/orchestrate_deploy.py
 
   post_build:
     commands:
