@@ -22,7 +22,7 @@ frontendApi:
     args:
       logLevel: info
       logFormat: json
-      maestroUrl: http://maestro-http.maestro:8080
+      maestroUrl: http://maestro-http.maestro-server:8080
       dynamodbRegion: us-east-2
       dynamodbTable: rosa-customer-accounts
       apiPort: 8000
