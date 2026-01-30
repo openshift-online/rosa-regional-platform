@@ -1,6 +1,0 @@
-apiVersion: v2
-name: rosa-regional-frontend
-description: A Helm chart for rosa-regional-frontend API with Envoy sidecar
-type: application
-version: 0.1.0
-appVersion: "1.0"

@@ -158,38 +158,6 @@ def get_cluster_types(base_dir: Path) -> List[str]:
     return cluster_types
 
 
-def get_cluster_type_patches(cluster_type: str) -> Dict[str, Any]:
-    """Get cluster-type specific patches to apply to the ApplicationSet.
-
-    Define conditional patches here for each cluster type. This allows a single
-    base-applicationset.yaml while still supporting cluster-type specific customizations.
-
-    Args:
-        cluster_type: Type of cluster (management-cluster, regional-cluster, etc.)
-
-    Returns:
-        Dictionary of patches to apply, or empty dict if no patches needed
-    """
-    patches = {
-        'regional-cluster': {
-            # Add templatePatch for rosa-regional-frontend to ignore TargetGroupBinding ARN differences
-            'templatePatch': """{{- if eq .path.basename "rosa-regional-frontend" }}
-spec:
-  ignoreDifferences:
-    - group: eks.amazonaws.com
-      kind: TargetGroupBinding
-      jsonPointers:
-        - /spec/targetGroupARN
-{{- end }}
-"""
-        },
-        # Add other cluster-type patches here as needed
-        # 'management-cluster': { ... }
-    }
-
-    return patches.get(cluster_type, {})
-
-
 def create_applicationset_template(cluster_type: str, environment: str, region: str, config_revision: str = None, base_dir: Path = None) -> Dict[str, Any]:
     """Create ApplicationSet YAML template with specific commit hash or default revision.
 
@@ -203,17 +171,12 @@ def create_applicationset_template(cluster_type: str, environment: str, region: 
     Returns:
         ApplicationSet dictionary
     """
+    # Always load the base ApplicationSet as the starting point
     base_applicationset_path = base_dir / 'applicationset' / 'base-applicationset.yaml'
-
     if not base_applicationset_path.exists():
         raise ValueError(f"Base ApplicationSet not found: {base_applicationset_path}")
 
     applicationset = load_yaml(base_applicationset_path)
-
-    # Apply cluster-type specific patches
-    cluster_patches = get_cluster_type_patches(cluster_type)
-    for key, value in cluster_patches.items():
-        applicationset['spec'][key] = value
 
     # If config_revision is specified, override the git revision to use the specific commit hash
     if config_revision:

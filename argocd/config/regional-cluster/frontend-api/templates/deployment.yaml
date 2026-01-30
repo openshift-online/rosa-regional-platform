@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.frontendApi.app.name }}
+  namespace: {{ .Values.frontendApi.namespace }}
+  labels:
+    app: {{ .Values.frontendApi.app.name }}
+spec:
+  replicas: {{ .Values.frontendApi.deployment.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.frontendApi.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.frontendApi.app.name }}
+    spec:
+      serviceAccountName: {{ .Values.frontendApi.serviceAccount.name }}
+      containers:
+        - name: {{ .Values.frontendApi.app.name }}
+          image: {{ .Values.frontendApi.app.image.repository }}:{{ .Values.frontendApi.app.image.tag }}
+          imagePullPolicy: {{ .Values.frontendApi.app.image.pullPolicy }}
+          args:
+            - serve
+            - --log-level={{ .Values.frontendApi.app.args.logLevel }}
+            - --log-format={{ .Values.frontendApi.app.args.logFormat }}
+            - --maestro-url={{ .Values.frontendApi.app.args.maestroUrl }}
+            - --dynamodb-region={{ .Values.frontendApi.app.args.dynamodbRegion }}
+            - --dynamodb-table={{ .Values.frontendApi.app.args.dynamodbTable }}
+            - --api-port={{ .Values.frontendApi.app.args.apiPort }}
+            - --health-port={{ .Values.frontendApi.app.args.healthPort }}
+            - --metrics-port={{ .Values.frontendApi.app.args.metricsPort }}
+          ports:
+            - name: api
+              containerPort: {{ .Values.frontendApi.app.args.apiPort }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.frontendApi.app.args.healthPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.frontendApi.app.args.metricsPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /v0/live
+              port: health
+            initialDelaySeconds: {{ .Values.frontendApi.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontendApi.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.frontendApi.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.frontendApi.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /v0/ready
+              port: health
+            initialDelaySeconds: {{ .Values.frontendApi.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontendApi.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.frontendApi.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.frontendApi.probes.readiness.failureThreshold }}
+          resources:
+            requests:
+              cpu: {{ .Values.frontendApi.app.resources.requests.cpu }}
+              memory: {{ .Values.frontendApi.app.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.frontendApi.app.resources.limits.cpu }}
+              memory: {{ .Values.frontendApi.app.resources.limits.memory }}
+        - name: envoy
+          image: {{ .Values.frontendApi.envoy.image.repository }}:{{ .Values.frontendApi.envoy.image.tag }}
+          ports:
+            - containerPort: {{ .Values.frontendApi.service.ports.http }}
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+          command:
+            - envoy
+            - -c
+            - /etc/envoy/envoy.yaml
+            - --log-level
+            - info
+          livenessProbe:
+            httpGet:
+              path: /v0/live
+              port: {{ .Values.frontendApi.service.ports.http }}
+            initialDelaySeconds: {{ .Values.frontendApi.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontendApi.probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /v0/live
+              port: {{ .Values.frontendApi.service.ports.http }}
+            initialDelaySeconds: {{ .Values.frontendApi.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontendApi.probes.readiness.periodSeconds }}
+          resources:
+            requests:
+              cpu: {{ .Values.frontendApi.envoy.resources.requests.cpu }}
+              memory: {{ .Values.frontendApi.envoy.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.frontendApi.envoy.resources.limits.cpu }}
+              memory: {{ .Values.frontendApi.envoy.resources.limits.memory }}
+      volumes:
+        - name: envoy-config
+          configMap:
+            name: envoy-config

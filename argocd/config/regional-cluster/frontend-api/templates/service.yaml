@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.frontendApi.app.name }}
+  namespace: {{ .Values.frontendApi.namespace }}
+  labels:
+    app: {{ .Values.frontendApi.app.name }}
+spec:
+  type: {{ .Values.frontendApi.service.type }}
+  selector:
+    app: {{ .Values.frontendApi.app.name }}
+  ports:
+    - name: http
+      port: {{ .Values.frontendApi.service.ports.http }}
+      targetPort: {{ .Values.frontendApi.service.ports.http }}
+      protocol: TCP
+    - name: api
+      port: {{ .Values.frontendApi.service.ports.api }}
+      targetPort: api
+      protocol: TCP
+    - name: health
+      port: {{ .Values.frontendApi.service.ports.health }}
+      targetPort: health
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.frontendApi.service.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
