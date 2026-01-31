@@ -12,7 +12,7 @@ spec:
     listKind: AppliedManifestWorkList
     plural: appliedmanifestworks
     singular: appliedmanifestwork
-  preserveUnknownFields: false
+  # preserveUnknownFields: false # TODO: copied from upstream, argocd does not set this filed blocks SYNC
   scope: Cluster
   versions:
   - name: v1
