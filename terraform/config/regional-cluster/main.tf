@@ -4,6 +4,9 @@
 
 # Configure AWS provider
 provider "aws" {
+  assume_role {
+    role_arn = var.assume_role_arn
+  }
   default_tags {
     tags = {
       app-code      = var.app_code

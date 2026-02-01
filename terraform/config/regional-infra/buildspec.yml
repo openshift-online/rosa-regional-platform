@@ -1,0 +1,93 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - yum install -y unzip python3 jq
+      - pip3 install boto3 pyyaml
+      - echo "Installing Terraform..."
+      - curl -O https://releases.hashicorp.com/terraform/1.10.4/terraform_1.10.4_linux_amd64.zip
+      - unzip -o terraform_1.10.4_linux_amd64.zip -d /tmp/tf-bin
+      - mv /tmp/tf-bin/terraform /usr/local/bin/
+      - echo "Installing kubectl..."
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
+      - chmod +x scripts/validate-argocd-config.sh scripts/bootstrap-argocd.sh
+
+  build:
+    commands:
+      - echo "Processing Management Cluster Configurations..."
+      - |
+        process_target() {
+            local MANAGEMENT_ACCOUNT_ID=$1
+            local REGION=$2
+            local ALIAS=$3
+
+            echo "---------------------------------------------------"
+            echo "Processing Target: $ALIAS ($MANAGEMENT_ACCOUNT_ID) in $REGION"
+            
+            # Assume Role into Management Account
+            local ROLE_ARN="arn:aws:iam::${MANAGEMENT_ACCOUNT_ID}:role/OrganizationAccountAccessRole"
+            echo "Assuming role: $ROLE_ARN"
+            
+            CREDENTIALS=$(aws sts assume-role --role-arn $ROLE_ARN --role-session-name ManagementProvisionSession --output json || echo "FAILED")
+            
+            if [[ "$CREDENTIALS" == "FAILED" ]]; then
+                echo "❌ Failed to assume role in Management Account. Ensure Trust Relationship is set up."
+                exit 1
+            fi
+            
+            export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | jq -r .Credentials.AccessKeyId)
+            export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | jq -r .Credentials.SecretAccessKey)
+            export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | jq -r .Credentials.SessionToken)
+            
+            # Export Variables for Makefile / Terraform Backend
+            # State is stored in the Regional Account (Current Account), but we use the Management Alias in the key
+            REGIONAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            export TF_STATE_BUCKET="terraform-state-management-${REGIONAL_ACCOUNT_ID}"
+            export TF_STATE_KEY="management-cluster/${ALIAS}.tfstate"
+            
+            # Dynamically detect bucket region
+            BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
+            if [ "$BUCKET_REGION" == "None" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
+            export TF_STATE_REGION=$BUCKET_REGION
+            
+            export TF_STATE_DYNAMODB_TABLE="terraform-locks-management"
+
+            # Skip ArgoCD validation for infra provisioning
+            export SKIP_ARGOCD_VALIDATION=true
+            
+            # Run Provision
+            echo "Running Provisioning..."
+            make pipeline-provision-management
+            
+            # Unset creds for next iteration
+            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+        }
+
+        # 1. Process Manual Overrides
+        if [[ -n "$MANUAL_TARGET_ACCOUNT_ID" && -n "$MANUAL_TARGET_REGION" && -n "$MANUAL_TARGET_ALIAS" ]]; then
+            echo "Detected Manual Configuration Override."
+            process_target "$MANUAL_TARGET_ACCOUNT_ID" "$MANUAL_TARGET_REGION" "$MANUAL_TARGET_ALIAS"
+        fi
+
+        # 2. Process YAML Files
+        for file in management/*.yaml; do
+            [ -e "$file" ] || continue
+            
+            MANAGEMENT_ACCOUNT_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('account_id', ''))")
+            REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('region', ''))")
+            ALIAS=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('alias', ''))")
+            
+            if [[ -z "$MANAGEMENT_ACCOUNT_ID" || -z "$REGION" ]]; then
+                echo "Skipping invalid config: $file"
+                continue
+            fi
+
+            process_target "$MANAGEMENT_ACCOUNT_ID" "$REGION" "$ALIAS"
+        done

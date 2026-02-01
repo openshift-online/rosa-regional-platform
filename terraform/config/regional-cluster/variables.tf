@@ -18,6 +18,16 @@ variable "cost_center" {
 }
 
 # =============================================================================
+# Cross-Account Configuration
+# =============================================================================
+
+variable "assume_role_arn" {
+  description = "Role ARN to assume for provisioning resources (Cross-Account)"
+  type        = string
+  default     = null
+}
+
+# =============================================================================
 # ArgoCD Bootstrap Configuration Variables
 # =============================================================================
 
@@ -42,9 +52,16 @@ variable "enable_bastion" {
   default     = false
 }
 
-# Maestro Configuration Variables
+# =============================================================================
+# API Gateway Configuration Variables
 # =============================================================================
 
+variable "region_name" {
+  description = "AWS region name for API Gateway URL construction (e.g., 'us-west-2')"
+  type        = string
+}
+
+# Maestro Configuration Variables
 variable "maestro_db_instance_class" {
   description = "RDS instance class for Maestro PostgreSQL database"
   type        = string
