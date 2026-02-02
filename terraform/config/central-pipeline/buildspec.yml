@@ -83,6 +83,7 @@ phases:
             export TF_VAR_github_repo_name=$GITHUB_REPO_NAME
             export TF_VAR_github_branch="${GITHUB_BRANCH:-main}"
             export TF_VAR_assume_role_arn=$ROLE_ARN
+            export TF_VAR_target_alias=$ALIAS
             
             echo "Applying Terraform for Regional Infra..."
             terraform apply -auto-approve
@@ -98,7 +99,7 @@ phases:
         fi
 
         # 2. Process YAML Files
-        for file in region/*.yaml; do
+        for file in deploy/*/regional.yaml; do
             [ -e "$file" ] || continue
             
             ACCOUNT_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('account_id', ''))")

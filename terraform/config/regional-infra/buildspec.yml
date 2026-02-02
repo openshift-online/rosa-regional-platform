@@ -77,7 +77,8 @@ phases:
         fi
 
         # 2. Process YAML Files
-        for file in management/*.yaml; do
+        echo "Looking for management configurations in deploy/${TARGET_ALIAS}/management/"
+        for file in deploy/${TARGET_ALIAS}/management/*.yaml; do
             [ -e "$file" ] || continue
             
             MANAGEMENT_ACCOUNT_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('account_id', ''))")
