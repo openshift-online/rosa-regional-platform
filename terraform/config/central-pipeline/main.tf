@@ -196,8 +196,9 @@ resource "aws_codebuild_project" "central_builder" {
 
 # CodePipeline
 resource "aws_codepipeline" "central_pipeline" {
-  name     = "central-regional-pipeline"
-  role_arn = aws_iam_role.codepipeline_role.arn
+  name          = "central-regional-pipeline"
+  role_arn      = aws_iam_role.codepipeline_role.arn
+  pipeline_type = "V2"
 
   artifact_store {
     location = aws_s3_bucket.pipeline_artifact.bucket
