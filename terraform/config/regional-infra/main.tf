@@ -195,12 +195,28 @@ resource "aws_codebuild_project" "regional_builder" {
 
 # CodePipeline
 resource "aws_codepipeline" "regional_pipeline" {
-  name     = "regional-management-pipeline"
-  role_arn = aws_iam_role.codepipeline_role.arn
+  name          = "regional-management-pipeline"
+  role_arn      = aws_iam_role.codepipeline_role.arn
+  pipeline_type = "V2"
 
   artifact_store {
     location = aws_s3_bucket.pipeline_artifact.bucket
     type     = "S3"
+  }
+
+  trigger {
+    provider_type = "CodeStarSourceConnection"
+    git_configuration {
+      source_action_name = "Source"
+      push {
+        branches {
+          includes = [var.github_branch]
+        }
+        file_paths {
+          includes = ["deploy/${var.target_alias}/management/**", "terraform/config/regional-infra/**"]
+        }
+      }
+    }
   }
 
   stage {

@@ -213,6 +213,9 @@ resource "aws_codepipeline" "central_pipeline" {
         branches {
           includes = [var.github_branch]
         }
+        file_paths {
+          includes = ["deploy/**", "terraform/config/central-pipeline/**", "terraform/config/regional-infra/**"]
+        }
       }
     }
   }
