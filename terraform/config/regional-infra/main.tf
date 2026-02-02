@@ -181,6 +181,10 @@ resource "aws_codebuild_project" "regional_builder" {
       name  = "MANUAL_TARGET_ALIAS"
       value = var.target_alias
     }
+    environment_variable {
+      name  = "TARGET_ALIAS"
+      value = var.target_alias
+    }
   }
 
   source {
