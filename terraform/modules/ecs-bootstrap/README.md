@@ -68,7 +68,7 @@ module "ecs_bootstrap" {
 
 | Name | Version |
 |------|---------|
-| terraform | >= 1.14.3 |
+| terraform | >= 1.10 |
 | aws | >= 5.0 |
 
 ## Future Enhancements

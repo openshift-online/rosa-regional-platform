@@ -99,6 +99,6 @@ See [Maestro Architecture Diagram](../../../docs/maestro-architecture-diagram.md
 
 ## Requirements
 
-- Terraform >= 1.14.3
+- Terraform >= 1.10
 - AWS Provider >= 6.0
 - Regional EKS cluster with Pod Identity enabled

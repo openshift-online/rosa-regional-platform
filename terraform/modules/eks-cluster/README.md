@@ -140,7 +140,7 @@ The Lambda function:
 
 ## Requirements
 
-- Terraform >= 1.14.3
+- Terraform >= 1.10
 - AWS Provider >= 6.0
 - Random Provider >= 3.4
 - Required provider `default_tags` configuration
