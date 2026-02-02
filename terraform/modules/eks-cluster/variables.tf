@@ -23,13 +23,13 @@ variable "cluster_name_override" {
 # =============================================================================
 
 variable "cluster_version" {
-  description = "Kubernetes version for the EKS cluster. Use latest available for security updates."
+  description = "EKS cluster version"
   type        = string
   default     = "1.34"
 
   validation {
-    condition     = can(regex("^1\\.(3[0-9]|[4-9][0-9])$", var.cluster_version))
-    error_message = "Cluster version must be 1.34 or higher for modern EKS features."
+    condition     = can(regex("^1\\.(2[89]|3[0-9])$", var.cluster_version))
+    error_message = "Cluster version must be more modern."
   }
 }
 
@@ -68,6 +68,15 @@ variable "private_subnet_cidrs" {
     condition     = length(var.private_subnet_cidrs) >= 2
     error_message = "Must provide at least 2 private subnets for EKS high availability."
   }
+
+  validation {
+    condition = length(var.availability_zones) > 0 ? (
+      length(var.private_subnet_cidrs) <= length(var.availability_zones)
+      ) : (
+      length(var.private_subnet_cidrs) <= 3
+    )
+    error_message = "Number of private subnet CIDRs cannot exceed available availability zones. When availability_zones is specified, subnet count must not exceed the number of specified AZs. When using auto-detected AZs (default), provide at most 3 subnets."
+  }
 }
 
 variable "public_subnet_cidrs" {
@@ -79,13 +88,17 @@ variable "public_subnet_cidrs" {
     condition     = length(var.public_subnet_cidrs) >= 1
     error_message = "Must provide at least 1 public subnet for NAT gateway."
   }
+
+  validation {
+    condition = length(var.availability_zones) > 0 ? (
+      length(var.public_subnet_cidrs) <= length(var.availability_zones)
+      ) : (
+      length(var.public_subnet_cidrs) <= 3
+    )
+    error_message = "Number of public subnet CIDRs cannot exceed available availability zones. When availability_zones is specified, subnet count must not exceed the number of specified AZs. When using auto-detected AZs (default), provide at most 3 subnets."
+  }
 }
 
-variable "single_nat_gateway" {
-  description = "Use single NAT gateway for cost optimization (dev/test) or multiple for HA (production)"
-  type        = bool
-  default     = true
-}
 
 # =============================================================================
 # EKS node group configuration
@@ -150,12 +163,6 @@ variable "node_disk_size" {
 # =============================================================================
 # Advanced security configuration options
 # =============================================================================
-
-variable "enable_cluster_encryption" {
-  description = "Enable encryption at rest for EKS secrets"
-  type        = bool
-  default     = false # TODO(Claudio): We'll want this for prod
-}
 
 variable "enable_pod_security_standards" {
   description = "Enable Kubernetes Pod Security Standards for enhanced security"

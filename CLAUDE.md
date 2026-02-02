@@ -106,7 +106,9 @@ docs/
 - **AWS IAM Only**: Use AWS IAM for all authentication/authorization
 - **Private Networking**: No public endpoints except regional API Gateway
 - **Least Privilege**: Follow AWS IAM best practices for service roles
-- **Encrypted Everything**: RDS, EBS, and in-transit communications
+- **Encryption at Rest**: KMS-encrypted EKS secrets, RDS, and EBS volumes
+- **Network Segmentation**: Dedicated security groups for VPC endpoints and services
+- **High Availability**: Multi-AZ NAT Gateways eliminate single points of failure
 - **Break-Glass Access**: Use ephemeral containers for emergency access only
 
 ### Testing and Validation

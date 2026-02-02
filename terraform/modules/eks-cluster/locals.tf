@@ -1,3 +1,7 @@
+# =============================================================================
+# Local Values
+# =============================================================================
+
 # Random suffix for resource naming (only used if cluster_name_override is not set)
 resource "random_string" "suffix" {
   length  = 4

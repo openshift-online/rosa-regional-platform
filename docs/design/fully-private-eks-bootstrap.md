@@ -83,6 +83,18 @@ Creates fully private EKS cluster with:
 - Pod Identity for workload authentication
 - Managed addons (CoreDNS, VPC-CNI, EBS-CSI)
 
+### Security and Scalability Enhancements
+**Network Security**:
+- KMS encryption at rest for Kubernetes secrets using customer-managed keys
+- Dedicated security groups for VPC endpoints (port 443 from VPC CIDR only)
+- Restricted cluster egress limited to HTTPS for container registries and VPC internal traffic
+- EKS Auto Mode authentication configured for API_AND_CONFIG_MAP mode
+
+**High Availability Network Architecture**:
+- Multi-AZ NAT Gateway deployment (one per availability zone)
+- Per-AZ private route tables for traffic distribution
+- Eliminates single point of failure for external connectivity
+
 ### Bootstrap System
 ECS Fargate-based ArgoCD installation:
 - Dedicated ECS infrastructure for secure cluster operations

@@ -8,6 +8,21 @@ Creates private EKS clusters with security-first configuration and standardized 
 - **Provider-Level Tagging**: Enforces required organizational tags via AWS provider default_tags
 - **Fully Private Clusters**: EKS control plane with private endpoint only
 - **GitOps Bootstrap**: Automated ArgoCD installation via Lambda for self-management
+- **Security Hardening**: KMS encryption, IMDSv2 enforcement, and network segmentation
+- **High Availability**: Multi-AZ NAT Gateways for fault-tolerant egress connectivity
+
+## Security & Scalability Enhancements
+
+### Network Security
+- **KMS Encryption**: Kubernetes secrets encrypted at rest using customer-managed keys
+- **Dedicated Security Groups**: VPC endpoints use isolated security groups (port 443 from VPC CIDR only)
+- **Restricted Egress**: Cluster egress limited to HTTPS for container registries and VPC internal traffic
+- **Auto Mode Authentication**: EKS authentication configured for API_AND_CONFIG_MAP mode
+
+### High Availability Network Architecture
+- **Multi-AZ NAT Deployment**: One NAT Gateway per availability zone eliminates single points of failure
+- **Per-AZ Route Tables**: Traffic distribution across availability zones for fault isolation
+- **Improved Resilience**: AZ outages don't impact other zones' external connectivity
 
 ## Naming Convention
 
@@ -93,13 +108,11 @@ module "regional_cluster" {
 | `availability_zones` | List of availability zones (auto-detected if empty) | `list(string)` | `[]` | no |
 | `private_subnet_cidrs` | CIDR blocks for private subnets | `list(string)` | `["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]` | no |
 | `public_subnet_cidrs` | CIDR blocks for public subnets | `list(string)` | `["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]` | no |
-| `single_nat_gateway` | Use single NAT gateway for cost optimization | `bool` | `true` | no |
 | `node_instance_types` | EC2 instance types for nodes | `list(string)` | `["t3.medium", "t3a.medium"]` | no |
 | `node_group_desired_size` | Desired number of nodes | `number` | `2` | no |
 | `node_group_min_size` | Minimum number of nodes | `number` | `1` | no |
 | `node_group_max_size` | Maximum number of nodes | `number` | `4` | no |
 | `node_disk_size` | EBS volume size for nodes (GiB) | `number` | `20` | no |
-| `enable_cluster_encryption` | Enable encryption at rest for EKS secrets | `bool` | `false` | no |
 | `enable_pod_security_standards` | Enable Pod Security Standards | `bool` | `true` | no |
 | `bootstrap_enabled` | Enable ArgoCD bootstrap for GitOps management | `bool` | `true` | no |
 | `argocd_namespace` | Kubernetes namespace for ArgoCD installation | `string` | `"argocd"` | no |
