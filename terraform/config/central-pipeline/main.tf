@@ -1,21 +1,15 @@
 provider "aws" {
   region = var.region
-  assume_role {
-    role_arn = var.assume_role_arn
-  }
 }
 
-data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
 resource "aws_codestarconnections_connection" "github" {
-  name          = "regional-github-connection"
+  name          = "central-github-connection"
   provider_type = "GitHub"
 }
 
 # IAM Role for CodeBuild
 resource "aws_iam_role" "codebuild_role" {
-  name = "regional-codebuild-role"
+  name = "central-codebuild-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -44,10 +38,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = [
-          "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${aws_codebuild_project.regional_builder.name}",
-          "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${aws_codebuild_project.regional_builder.name}:*"
-        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
@@ -61,8 +52,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Resource = [
           aws_s3_bucket.pipeline_artifact.arn,
           "${aws_s3_bucket.pipeline_artifact.arn}/*",
-          aws_s3_bucket.management_state.arn,
-          "${aws_s3_bucket.management_state.arn}/*"
+          "arn:aws:s3:::terraform-state-*", # Allow access to State Buckets
+          "arn:aws:s3:::terraform-state-*/*"
         ]
       },
       {
@@ -73,7 +64,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "dynamodb:DeleteItem",
           "dynamodb:LockItem"
         ]
-        Resource = aws_dynamodb_table.management_locks.arn
+        Resource = "arn:aws:dynamodb:*:*:table/terraform-locks"
       },
       {
         Effect   = "Allow"
@@ -86,7 +77,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
 
 # IAM Role for CodePipeline
 resource "aws_iam_role" "codepipeline_role" {
-  name = "regional-codepipeline-role"
+  name = "central-codepipeline-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -135,14 +126,14 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
           "codebuild:BatchGetBuilds",
           "codebuild:StartBuild"
         ]
-        Resource = aws_codebuild_project.regional_builder.arn
+        Resource = aws_codebuild_project.central_builder.arn
       },
       {
         Effect = "Allow"
         Action = [
           "codebuild:StartBuild"
         ]
-        Resource = "arn:aws:codebuild:*:*:project/${aws_codebuild_project.regional_builder.name}"
+        Resource = "arn:aws:codebuild:*:*:project/${aws_codebuild_project.central_builder.name}"
       }
     ]
   })
@@ -150,12 +141,14 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
 
 # S3 Bucket for Artifacts
 resource "aws_s3_bucket" "pipeline_artifact" {
-  bucket_prefix = "regional-pipeline-artifacts-"
+  bucket_prefix = "central-pipeline-artifacts-"
+  # TODO: Remove for prod
+  force_destroy = true
 }
 
 # CodeBuild Project
-resource "aws_codebuild_project" "regional_builder" {
-  name          = "regional-management-provisioner"
+resource "aws_codebuild_project" "central_builder" {
+  name          = "central-regional-provisioner"
   service_role  = aws_iam_role.codebuild_role.arn
   build_timeout = 60
 
@@ -170,6 +163,18 @@ resource "aws_codebuild_project" "regional_builder" {
     image_pull_credentials_type = "CODEBUILD"
 
     environment_variable {
+      name  = "GITHUB_REPO_OWNER"
+      value = var.github_repo_owner
+    }
+    environment_variable {
+      name  = "GITHUB_REPO_NAME"
+      value = var.github_repo_name
+    }
+    environment_variable {
+      name  = "GITHUB_BRANCH"
+      value = var.github_branch
+    }
+    environment_variable {
       name  = "MANUAL_TARGET_ACCOUNT_ID"
       value = var.target_account_id
     }
@@ -181,26 +186,35 @@ resource "aws_codebuild_project" "regional_builder" {
       name  = "MANUAL_TARGET_ALIAS"
       value = var.target_alias
     }
-    environment_variable {
-      name  = "TARGET_ALIAS"
-      value = var.target_alias
-    }
   }
 
   source {
     type      = "CODEPIPELINE"
-    buildspec = "terraform/config/regional-infra/buildspec.yml"
+    buildspec = "terraform/config/central-pipeline/buildspec.yml"
   }
 }
 
 # CodePipeline
-resource "aws_codepipeline" "regional_pipeline" {
-  name     = "regional-management-pipeline"
-  role_arn = aws_iam_role.codepipeline_role.arn
+resource "aws_codepipeline" "central_pipeline" {
+  name          = "central-regional-pipeline"
+  role_arn      = aws_iam_role.codepipeline_role.arn
+  pipeline_type = "V2"
 
   artifact_store {
     location = aws_s3_bucket.pipeline_artifact.bucket
     type     = "S3"
+  }
+
+  trigger {
+    provider_type = "CodeStarSourceConnection"
+    git_configuration {
+      source_action_name = "Source"
+      push {
+        branches {
+          includes = [var.github_branch]
+        }
+      }
+    }
   }
 
   stage {
@@ -218,6 +232,7 @@ resource "aws_codepipeline" "regional_pipeline" {
         ConnectionArn    = aws_codestarconnections_connection.github.arn
         FullRepositoryId = "${var.github_repo_owner}/${var.github_repo_name}"
         BranchName       = var.github_branch
+        DetectChanges    = "true"
       }
     }
   }
@@ -226,7 +241,7 @@ resource "aws_codepipeline" "regional_pipeline" {
     name = "Build"
 
     action {
-      name            = "ProvisionManagementCluster"
+      name            = "ProvisionRegionalCluster"
       category        = "Build"
       owner           = "AWS"
       provider        = "CodeBuild"
@@ -234,7 +249,7 @@ resource "aws_codepipeline" "regional_pipeline" {
       version         = "1"
 
       configuration = {
-        ProjectName = aws_codebuild_project.regional_builder.name
+        ProjectName = aws_codebuild_project.central_builder.name
       }
     }
   }
