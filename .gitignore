@@ -6,7 +6,7 @@
 *.tfvars.json
 *.terraform.lock.hcl
 *.zip
-bastion_task.json
+bastion_task*.json
 .venv
 
 # Helm
