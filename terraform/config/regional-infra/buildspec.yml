@@ -10,8 +10,8 @@ phases:
       - yum install -y unzip python3 jq
       - pip3 install boto3 pyyaml
       - echo "Installing Terraform..."
-      - curl -O https://releases.hashicorp.com/terraform/1.10.4/terraform_1.10.4_linux_amd64.zip
-      - unzip -o terraform_1.10.4_linux_amd64.zip -d /tmp/tf-bin
+      - curl -O https://releases.hashicorp.com/terraform/1.14.3/terraform_1.14.3_linux_amd64.zip
+      - unzip -o terraform_1.14.3_linux_amd64.zip -d /tmp/tf-bin
       - mv /tmp/tf-bin/terraform /usr/local/bin/
       - echo "Installing kubectl..."
       - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
