@@ -14,7 +14,7 @@ phases:
       - unzip -o terraform_1.14.3_linux_amd64.zip -d /tmp/tf-bin
       - mv /tmp/tf-bin/terraform /usr/local/bin/
       - echo "Installing kubectl..."
-      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - curl -LO "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
       - chmod +x scripts/validate-argocd-config.sh scripts/bootstrap-argocd.sh
