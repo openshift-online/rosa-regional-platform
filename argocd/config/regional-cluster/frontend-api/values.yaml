@@ -23,7 +23,7 @@ frontendApi:
       logLevel: info
       logFormat: json
       maestroUrl: http://maestro-http.maestro-server:8080
-      dynamodbRegion: us-east-2
+      dynamodbRegion: us-east-1
       dynamodbTable: rosa-customer-accounts
       apiPort: 8000
       healthPort: 8081

@@ -75,10 +75,10 @@ Once the pipeline is bootstrapped, you can deploy new environments simply by add
 Create a file `region/<region-name>.yaml`:
 
 ```yaml
-# region/us-east-2.yaml
+# region/us-east-1.yaml
 account_id: "987654321098"   # Regional AWS Account ID
-region: "us-east-2"          # Target AWS Region
-alias: "regional-us-east-2"  # Unique Alias
+region: "us-east-1"          # Target AWS Region
+alias: "regional-us-east-1"  # Unique Alias
 ```
 
 1.  Commit and push this file.
@@ -117,7 +117,7 @@ terraform apply \
   -var="github_repo_name=YOUR_REPO_NAME" \
   -var="github_branch=your-feature-branch" \
   -var="target_account_id=REGIONAL_ACCOUNT_ID" \
-  -var="target_region=us-east-2" \
+  -var="target_region=us-east-1" \
   -var="target_alias=test-regional"
 ```
 
