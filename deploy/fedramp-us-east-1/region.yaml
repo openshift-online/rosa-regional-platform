@@ -1,0 +1,3 @@
+account_id: "018092638725"   # The AWS Account ID of the Regional Account -- SANDBOX05
+region: "us-east-1"          # The region to deploy the Regional Cluster and Pipeline into
+alias: "regional-us-east-1"  # Unique alias for this regional environment
