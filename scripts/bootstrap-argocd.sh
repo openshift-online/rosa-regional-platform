@@ -32,6 +32,7 @@ BOOTSTRAP_SECURITY_GROUP=$(echo "$OUTPUTS" | jq -r '.bootstrap_security_group_id
 LOG_GROUP=$(echo "$OUTPUTS" | jq -r '.bootstrap_log_group_name.value')
 REPOSITORY_URL=$(echo "$OUTPUTS" | jq -r '.repository_url.value')
 REPOSITORY_BRANCH=$(echo "$OUTPUTS" | jq -r '.repository_branch.value')
+API_ALLOWED_ACCOUNTS=$(echo "$OUTPUTS" | jq -r '.api_allowed_accounts.value // ""')
 
 # Static values
 APPLICATIONSET_PATH="argocd/rendered/$ENVIRONMENT/$REGION/${CLUSTER_TYPE}-manifests"
@@ -64,7 +65,8 @@ RUN_TASK_OUTPUT=$(aws ecs run-task \
         {\"name\": \"ENVIRONMENT\", \"value\": \"$ENVIRONMENT\"},
         {\"name\": \"REGION\", \"value\": \"$REGION\"},
         {\"name\": \"CLUSTER_TYPE\", \"value\": \"$CLUSTER_TYPE\"},
-        {\"name\": \"API_TARGET_GROUP_ARN\", \"value\": \"$API_TARGET_GROUP_ARN\"}
+        {\"name\": \"API_TARGET_GROUP_ARN\", \"value\": \"$API_TARGET_GROUP_ARN\"},
+        {\"name\": \"API_ALLOWED_ACCOUNTS\", \"value\": \"$API_ALLOWED_ACCOUNTS\"}
       ]
     }]
   }" 2>&1)

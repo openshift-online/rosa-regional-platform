@@ -34,11 +34,14 @@ data:
                               route:
                                 cluster: app_health
                                 timeout: 5s
+                                prefix_rewrite: "/healthz"
                             - match:
                                 prefix: "/v0/ready"
                               route:
                                 cluster: app_health
                                 timeout: 5s
+                                prefix_rewrite: "/readyz"
+                            # API routes → app's API port (8000)
                             - match:
                                 prefix: "/api/"
                               route:

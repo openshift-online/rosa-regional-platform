@@ -42,6 +42,15 @@ variable "enable_bastion" {
   default     = false
 }
 
+# =============================================================================
+# Frontend API Variables
+# =============================================================================
+
+variable "api_allowed_accounts" {
+  description = "Frontend API allowed accounts, comma list of account ids"
+  type        = string
+}
+
 # Maestro Configuration Variables
 # =============================================================================
 

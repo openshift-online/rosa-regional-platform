@@ -43,6 +43,9 @@ repository_branch = "main"
 
 # AWS region name (required for API Gateway URL construction)
 region_name = "test"
+# Multiple accoutns are defined like this due to helm: 
+# api_allowed_accounts = "111111111111\,222222222222\,333333333333"
+api_allowed_accounts = "123456789012"
 
 # Maestro Infrastructure Configuration
 

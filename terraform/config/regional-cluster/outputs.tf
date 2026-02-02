@@ -142,6 +142,11 @@ output "api_target_group_arn" {
   value       = module.api_gateway.target_group_arn
 }
 
+output "api_allowed_accounts" {
+  description = "Frontend API allowed accounts (comma-separated account IDs)"
+  value       = var.api_allowed_accounts
+}
+
 output "api_alb_dns_name" {
   description = "Internal ALB DNS name"
   value       = module.api_gateway.alb_dns_name
