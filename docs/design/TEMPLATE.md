@@ -1,10 +1,8 @@
-# [Decision Title: Brief, Action-Oriented Description]
+# [Design Title: Brief, Functionality-Oriented Description]
 
-***Scope***: ROSA-RP
+**Last Updated Date**: [YYYY-MM-DD]
 
-**Date**: [YYYY-MM-DD]
-
-## Decision
+## Summary
 
 [A clear, concise statement of the decision made. Should be one or two sentences that directly state what was decided. Use active voice and be specific.]
 
@@ -24,7 +22,7 @@
 2. **[Alternative 2 Name]**: [Brief description of this alternative, including key characteristics]
 3. **[Alternative 3 Name]**: [Brief description of this alternative, including key characteristics]
 
-## Decision Rationale
+## Design Rationale
 
 * **Justification**: [Explain why the chosen alternative is the best option given the context and constraints]
 * **Evidence**: [Provide concrete data, research findings, benchmarks, or expert opinions that support the decision]
@@ -96,13 +94,12 @@ Before finalizing a design decision document, verify:
 
 ### Structure Completeness
 - [ ] Title is descriptive and action-oriented
-- [ ] Scope is ROSA-RP
-- [ ] Date is present and in ISO format (YYYY-MM-DD)
-- [ ] All core sections are present: Decision, Context, Alternatives Considered, Decision Rationale, Consequences
+- [ ] Last Updated Date is present and in ISO format (YYYY-MM-DD)
+- [ ] All core sections are present: Summary, Context, Alternatives Considered, Design Rationale, Consequences
 - [ ] Both positive and negative consequences are listed
 
 ### Content Quality
-- [ ] Decision statement is clear and unambiguous
+- [ ] Design statement is clear and unambiguous
 - [ ] Problem statement articulates the "why"
 - [ ] Constraints and assumptions are explicitly documented
 - [ ] Rationale includes justification, evidence, and comparison

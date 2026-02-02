@@ -1,17 +1,18 @@
-# Design Decision 001: Fully Private EKS Cluster Bootstrap
+# ECS Fargate Bootstrap for Fully Private EKS Clusters
 
-## Status
-**Implemented**
+**Last Updated Date**: 2026-02-02
 
-## Scope
+## Summary
 
-This design decision addresses how Management and Regional clusters are provisioned and configured. It does not address what runs the terraform (e.g., HCP Terraform, AWS CodePipeline, Atlantis).
-
-The bootstrap solution must work regardless of terraform runner choice, assuming only that the runner has AWS API access but cannot directly reach private EKS cluster APIs.
+The ROSA Regional Platform uses AWS ECS Fargate tasks to bootstrap ArgoCD installations in fully private EKS clusters, enabling secure GitOps-driven self-management without exposing cluster APIs to external terraform runners.
 
 ## Context
 
-The rosa-regional-platform requires a mechanism to provision and configure secure and private EKS clusters. 
+The rosa-regional-platform requires a mechanism to provision and configure secure and private EKS clusters.
+
+- **Problem Statement**: Management and Regional clusters must be provisioned and configured while maintaining complete network isolation from terraform runners
+- **Constraints**: Terraform runners have AWS API access but cannot directly reach private EKS cluster APIs. Solution must work regardless of terraform runner choice (HCP Terraform, AWS CodePipeline, Atlantis)
+- **Assumptions**: The bootstrap solution must work with any terraform execution environment while enabling GitOps-driven self-management 
 
 ## Alternatives Explored
 
@@ -116,8 +117,3 @@ ECS Fargate-based ArgoCD installation:
 - Infrastructure reusability for future audited SRE operations on private clusters
 - Standardized ECS pattern for secure, private cluster operations
 - Foundation for operational tasks beyond bootstrap (maintenance, monitoring, disaster recovery)
-
----
-
-**Decision Date**: January 15, 2026
-**Decision Maker**: RRP Team
