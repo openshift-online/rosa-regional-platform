@@ -14,6 +14,10 @@ ACCOUNT_ID=$1
 REGION=$2
 ALIAS=$3
 
+# Determine Repo Root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
 echo "WARNING: You are about to DESTROY the Regional Deployment for:"
 echo "  Account: $ACCOUNT_ID"
 echo "  Region:  $REGION"
@@ -33,7 +37,13 @@ TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
 TF_STATE_DYNAMODB_TABLE="terraform-locks"
 
 # Detect Bucket Region
-BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
+if ! BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text 2>/dev/null); then
+    echo "❌ Error: Could not find state bucket '$TF_STATE_BUCKET'."
+    echo "   Current Account ID: $CENTRAL_ACCOUNT_ID"
+    echo "   Please ensure you are authenticated to the CENTRAL Account where the state bucket resides."
+    exit 1
+fi
+
 if [ "$BUCKET_REGION" == "None" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
 TF_STATE_REGION=$BUCKET_REGION
 
@@ -76,7 +86,7 @@ echo "----------------------------------------------------------------"
 echo "Phase 1: Destroying Regional Cluster..."
 echo "----------------------------------------------------------------"
 
-cd terraform/config/regional-cluster
+cd "${REPO_ROOT}/terraform/config/regional-cluster"
 
 TF_STATE_KEY="regional-cluster/${ALIAS}.tfstate"
 
@@ -101,7 +111,7 @@ echo "----------------------------------------------------------------"
 echo "Phase 2: Destroying Regional Infrastructure..."
 echo "----------------------------------------------------------------"
 
-cd terraform/config/regional-infra
+cd "${REPO_ROOT}/terraform/config/regional-infra"
 
 TF_STATE_KEY_INFRA="regional-infra/${ALIAS}.tfstate"
 
