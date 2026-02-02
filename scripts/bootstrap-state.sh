@@ -3,7 +3,7 @@ set -euo pipefail
 
 REGION=${1:-$(aws configure get region 2>/dev/null || echo "us-east-1")}
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-BUCKET_NAME="terraform-statetmp-${ACCOUNT_ID}"
+BUCKET_NAME="terraform-state-${ACCOUNT_ID}"
 DYNAMODB_TABLE="terraform-locks"
 
 echo "Bootstrapping Terraform State in $REGION..."
