@@ -129,7 +129,7 @@ resource "aws_db_instance" "maestro" {
   auto_minor_version_upgrade = true
 
   # Parameter group (use default for now, can customize later)
-  parameter_group_name = "default.postgres16"
+  parameter_group_name = "default.postgres18"
 
   tags = merge(
     local.common_tags,

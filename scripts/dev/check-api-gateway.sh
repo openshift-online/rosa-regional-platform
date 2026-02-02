@@ -12,7 +12,7 @@
 #
 # Usage:
 #   cd terraform/config/regional-cluster
-#   ../../../scripts/check-api-gateway.sh
+#   ../../../scripts/dev/check-api-gateway.sh
 #
 # =============================================================================
 

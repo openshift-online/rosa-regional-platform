@@ -45,5 +45,3 @@ repository_branch = "main"
 # This is used as the Maestro consumer name and for looking up pre-provisioned resources
 cluster_id = "management-01"
 
-# Enable Maestro Agent deployment (defaults to false)
-maestro_enabled = false

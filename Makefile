@@ -56,7 +56,7 @@ terraform-upgrade:
 provision-management:
 	@echo "🚀 Provisioning management cluster..."
 	@echo ""
-	@scripts/validate-argocd-config.sh management-cluster
+	@scripts/dev/validate-argocd-config.sh management-cluster
 	@echo ""
 	@echo "📍 Terraform Directory: terraform/config/management-cluster"
 	@echo "🔑 AWS Caller Identity:" && aws sts get-caller-identity
@@ -77,7 +77,7 @@ provision-management:
 provision-regional:
 	@echo "🚀 Provisioning regional cluster..."
 	@echo ""
-	@scripts/validate-argocd-config.sh regional-cluster
+	@scripts/dev/validate-argocd-config.sh regional-cluster
 	@echo ""
 	@echo "📍 Terraform Directory: terraform/config/regional-cluster"
 	@echo "🔑 AWS Caller Identity:" && aws sts get-caller-identity
