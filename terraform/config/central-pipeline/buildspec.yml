@@ -27,6 +27,7 @@ phases:
             local ACCOUNT_ID=$1
             local REGION=$2
             local ALIAS=$3
+            local TARGET_DIR=${4:-$3}
             
             echo "---------------------------------------------------"
             echo "Processing Target: $ALIAS ($ACCOUNT_ID) in $REGION"
@@ -83,7 +84,7 @@ phases:
             export TF_VAR_github_repo_name=$GITHUB_REPO_NAME
             export TF_VAR_github_branch="${GITHUB_BRANCH:-main}"
             export TF_VAR_assume_role_arn=$ROLE_ARN
-            export TF_VAR_target_alias=$ALIAS
+            export TF_VAR_target_alias=$TARGET_DIR
             
             echo "Applying Terraform for Regional Infra..."
             terraform apply -auto-approve
@@ -111,5 +112,6 @@ phases:
                 continue
             fi
 
-            process_target "$ACCOUNT_ID" "$REGION" "$ALIAS"
+            DIR_NAME=$(basename $(dirname "$file"))
+            process_target "$ACCOUNT_ID" "$REGION" "$ALIAS" "$DIR_NAME"
         done
