@@ -1,6 +1,3 @@
-# Data source for current account (Regional)
-data "aws_caller_identity" "current" {}
-
 # Shared S3 Bucket for Management Cluster State
 resource "aws_s3_bucket" "management_state" {
   bucket = "terraform-state-management-${data.aws_caller_identity.current.account_id}"
