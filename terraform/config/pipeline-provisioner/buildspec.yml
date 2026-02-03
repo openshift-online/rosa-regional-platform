@@ -59,7 +59,7 @@ phases:
                     -backend-config="bucket=$TF_STATE_BUCKET" \
                     -backend-config="key=pipelines/regional-${REGION_NAME}.tfstate" \
                     -backend-config="region=$TF_STATE_REGION" \
-                    -backend-config="dynamodb_table=terraform-locks"
+                    -backend-config="use_lockfile=true"
 
                 # Build terraform apply command with variables
                 TF_VARS="-var=github_repo_owner=${GITHUB_REPO_OWNER} -var=github_repo_name=${GITHUB_REPO_NAME} -var=github_branch=${GITHUB_BRANCH} -var=region=${TARGET_REGION}"
@@ -102,7 +102,7 @@ phases:
                         -backend-config="bucket=$TF_STATE_BUCKET" \
                         -backend-config="key=pipelines/management-${REGION_NAME}-${CLUSTER_NAME}.tfstate" \
                         -backend-config="region=$TF_STATE_REGION" \
-                        -backend-config="dynamodb_table=terraform-locks"
+                        -backend-config="use_lockfile=true"
 
                     # Build terraform apply command with variables
                     TF_VARS="-var=github_repo_owner=${GITHUB_REPO_OWNER} -var=github_repo_name=${GITHUB_REPO_NAME} -var=github_branch=${GITHUB_BRANCH} -var=region=${TARGET_REGION}"
