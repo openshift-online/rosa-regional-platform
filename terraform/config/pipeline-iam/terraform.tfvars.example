@@ -1,0 +1,7 @@
+# ROSA Pipeline IAM Configuration
+# Copy this file to terraform.tfvars and set your account IDs
+
+# Account IDs - REPLACE WITH YOUR ACTUAL ACCOUNT IDS
+ci_account_id         = "123456789012"  # CI/Pipeline account
+regional_account_id   = "123456789013"  # Regional cluster account
+management_account_id = "123456789014"  # Management cluster account

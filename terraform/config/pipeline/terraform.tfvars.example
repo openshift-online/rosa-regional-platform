@@ -1,0 +1,21 @@
+# ROSA Regional Platform Pipeline Configuration
+#
+# REQUIRED: Only these 3 values need to be set!
+# Everything else has smart defaults.
+
+# Account IDs (replace with your actual account IDs)
+regional_account_id   = "123456789013"  # Regional account
+management_account_id = "123456789014"  # Management account
+aws_region           = "us-east-1"      # Pipeline region
+
+# Optional overrides (uncomment to customize)
+# environment = "staging"
+# pipeline_name_prefix = "my-custom-pipeline"
+# artifacts_bucket_prefix = "my-pipeline-artifacts"
+
+# GitHub configuration (uses default repo if not overridden)
+# github_repo_url = "https://github.com/typeid/rosa-regional-platform"  # Default
+# github_branch = "stub_pipeline"  # Default
+# codestar_connection_arn = null  # Will create new connection if not specified
+
+
