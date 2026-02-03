@@ -35,27 +35,15 @@ phases:
             REGIONAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
             echo "Regional Account ID: $REGIONAL_ACCOUNT_ID"
 
-            # Assume Role into Management Account
+            # Define Role ARN
             local ROLE_ARN="arn:aws:iam::${MANAGEMENT_ACCOUNT_ID}:role/OrganizationAccountAccessRole"
-            echo "Assuming role: $ROLE_ARN"
-
-            CREDENTIALS=$(aws sts assume-role --role-arn $ROLE_ARN --role-session-name ManagementProvisionSession --output json || echo "FAILED")
-
-            if [[ "$CREDENTIALS" == "FAILED" ]]; then
-                echo "❌ Failed to assume role in Management Account. Ensure Trust Relationship is set up."
-                exit 1
-            fi
-
-            export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | jq -r .Credentials.AccessKeyId)
-            export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | jq -r .Credentials.SecretAccessKey)
-            export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | jq -r .Credentials.SessionToken)
-
+            
             # Export Variables for Makefile / Terraform Backend
             # State is stored in the Regional Account (Current Account), but we use the Management Alias in the key
             export TF_STATE_BUCKET="terraform-state-management-${REGIONAL_ACCOUNT_ID}"
             export TF_STATE_KEY="management-cluster/${ALIAS}.tfstate"
             
-            # Dynamically detect bucket region
+            # Dynamically detect bucket region (uses Regional Creds)
             BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
             if [ "$BUCKET_REGION" == "None" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
             export TF_STATE_REGION=$BUCKET_REGION
@@ -65,12 +53,26 @@ phases:
             # Skip ArgoCD validation for infra provisioning
             export SKIP_ARGOCD_VALIDATION=true
             
+            # Generate override.tf for provider role assumption
+            echo "Generating override.tf for cross-account access..."
+            cat <<EOF > terraform/config/management-cluster/override.tf
+            provider "aws" {
+              assume_role {
+                role_arn = "${ROLE_ARN}"
+              }
+            }
+            EOF
+            
+            # Export ASSUME_ROLE_ARN for scripts that need explicit assumption (like bootstrap-argocd.sh)
+            export ASSUME_ROLE_ARN="${ROLE_ARN}"
+            
             # Run Provision
             echo "Running Provisioning..."
             make pipeline-provision-management
             
-            # Unset creds for next iteration
-            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+            # Cleanup
+            rm -f terraform/config/management-cluster/override.tf
+            unset ASSUME_ROLE_ARN
         }
 
         # 1. Process Manual Overrides
