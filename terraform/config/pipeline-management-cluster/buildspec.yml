@@ -31,23 +31,23 @@ phases:
             echo "---------------------------------------------------"
             echo "Processing Target: $ALIAS ($MANAGEMENT_ACCOUNT_ID) in $REGION"
 
-            # Get Regional Account ID BEFORE assuming role
-            REGIONAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            echo "Regional Account ID: $REGIONAL_ACCOUNT_ID"
+            # Get Central Account ID BEFORE assuming role
+            CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            echo "Central Account ID: $CENTRAL_ACCOUNT_ID"
 
             # Define Role ARN
             local ROLE_ARN="arn:aws:iam::${MANAGEMENT_ACCOUNT_ID}:role/OrganizationAccountAccessRole"
-            
+
             # Export Variables for Makefile / Terraform Backend
-            # State is stored in the Regional Account (Current Account), but we use the Management Alias in the key
-            export TF_STATE_BUCKET="terraform-state-management-${REGIONAL_ACCOUNT_ID}"
+            # State is stored in the Central Account (Current Account), but we use the Management Alias in the key
+            export TF_STATE_BUCKET="terraform-state-management-${CENTRAL_ACCOUNT_ID}"
             export TF_STATE_KEY="management-cluster/${ALIAS}.tfstate"
-            
-            # Dynamically detect bucket region (uses Regional Creds)
+
+            # Dynamically detect bucket region (uses Central Account Creds)
             BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
             if [ "$BUCKET_REGION" == "None" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
             export TF_STATE_REGION=$BUCKET_REGION
-            
+
             export TF_STATE_DYNAMODB_TABLE="terraform-locks-management"
 
             # Export Terraform Variables for Management Cluster
@@ -55,7 +55,7 @@ phases:
             export TF_VAR_service_phase="prod"
             export TF_VAR_cost_center="000"
             export TF_VAR_cluster_id="${ALIAS}"
-            export TF_VAR_regional_aws_account_id="${REGIONAL_ACCOUNT_ID}"
+            export TF_VAR_regional_aws_account_id="${CENTRAL_ACCOUNT_ID}"
             export TF_VAR_repository_url="${CODEBUILD_SOURCE_REPO_URL:-https://github.com/placeholder/repo.git}"
             export TF_VAR_repository_branch="${CODEBUILD_SOURCE_VERSION:-main}"
 
@@ -72,7 +72,20 @@ phases:
             
             # Export ASSUME_ROLE_ARN for scripts that need explicit assumption (like bootstrap-argocd.sh)
             export ASSUME_ROLE_ARN="${ROLE_ARN}"
-            
+
+            # Create placeholder Maestro agent secrets if they don't exist (using assumed role credentials)
+            echo "Ensuring Maestro agent secrets exist..."
+            for SECRET_NAME in "maestro/agent-cert" "maestro/agent-config"; do
+                if ! aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region ${REGION} 2>/dev/null; then
+                    echo "Creating placeholder secret: $SECRET_NAME"
+                    aws secretsmanager create-secret \
+                        --name "$SECRET_NAME" \
+                        --description "Placeholder secret for Maestro agent (created by buildspec)" \
+                        --secret-string '{"placeholder":true}' \
+                        --region ${REGION} || echo "Secret may already exist or error occurred"
+                fi
+            done
+
             # Run Provision
             echo "Running Provisioning..."
             make pipeline-provision-management

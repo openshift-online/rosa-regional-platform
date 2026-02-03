@@ -43,12 +43,12 @@ Run the bootstrap script to create the S3 bucket and DynamoDB table for Terrafor
 Initialize and apply the Terraform configuration for the Central Pipeline.
 
 ```bash
-cd terraform/config/central-pipeline
+cd terraform/config/pipeline-regional-cluster
 
 # 1. Initialize Backend (Replace with your Bucket Name)
 terraform init \
   -backend-config="bucket=terraform-state-YOUR_CENTRAL_ACCOUNT_ID" \
-  -backend-config="key=central-pipeline.tfstate" \
+  -backend-config="key=pipeline-regional-cluster.tfstate" \
   -backend-config="region=us-east-1" \
   -backend-config="dynamodb_table=terraform-locks"
 
@@ -110,7 +110,7 @@ You can bypass the GitOps flow and trigger a deployment manually for testing pur
 Run Terraform with manual override variables. This configures the pipeline to deploy to a specific target immediately upon execution.
 
 ```bash
-cd terraform/config/central-pipeline
+cd terraform/config/pipeline-regional-cluster
 
 terraform apply \
   -var="github_repo_owner=YOUR_GITHUB_USER" \

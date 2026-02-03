@@ -110,9 +110,9 @@ echo "----------------------------------------------------------------"
 echo "Phase 2: Destroying Regional Infrastructure..."
 echo "----------------------------------------------------------------"
 
-cd "${REPO_ROOT}/terraform/config/regional-infra"
+cd "${REPO_ROOT}/terraform/config/pipeline-management-cluster"
 
-TF_STATE_KEY_INFRA="regional-infra/${ALIAS}.tfstate"
+TF_STATE_KEY_INFRA="pipeline-management-cluster/${ALIAS}.tfstate"
 
 # Cleanup Pipeline Artifacts Bucket (to avoid destroy failure if not empty)
 echo "Cleaning up Pipeline Artifacts in Regional Account..."

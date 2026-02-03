@@ -1,0 +1,78 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - yum install -y unzip python3 jq
+      - pip3 install boto3 pyyaml
+      - echo "Installing kubectl..."
+      - curl -LO "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
+      - kubectl version --client
+      - chmod +x scripts/validate-argocd-config.sh scripts/bootstrap-argocd.sh
+
+  build:
+    commands:
+      - echo "Bootstrapping ArgoCD on Regional Cluster..."
+      - |
+        bootstrap_target() {
+            local ACCOUNT_ID=$1
+            local REGION=$2
+            local ALIAS=$3
+
+            echo "---------------------------------------------------"
+            echo "Bootstrapping ArgoCD: $ALIAS ($ACCOUNT_ID) in $REGION"
+
+            local ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/OrganizationAccountAccessRole"
+
+            # Export ASSUME_ROLE_ARN for bootstrap script
+            export ASSUME_ROLE_ARN="${ROLE_ARN}"
+
+            echo "Validating ArgoCD configuration..."
+            ./scripts/validate-argocd-config.sh regional-cluster
+
+            echo "Running ArgoCD bootstrap..."
+            ./scripts/bootstrap-argocd.sh regional-cluster
+
+            echo "Verifying ArgoCD deployment..."
+            # The bootstrap script handles kubeconfig setup with role assumption
+            kubectl get pods -n argocd || echo "ArgoCD pods not yet ready"
+
+            unset ASSUME_ROLE_ARN
+        }
+
+        # Process Manual Overrides if present
+        if [[ -n "$MANUAL_TARGET_ACCOUNT_ID" && -n "$MANUAL_TARGET_REGION" && -n "$MANUAL_TARGET_ALIAS" ]]; then
+            echo "Detected Manual Configuration Override."
+            bootstrap_target "$MANUAL_TARGET_ACCOUNT_ID" "$MANUAL_TARGET_REGION" "$MANUAL_TARGET_ALIAS"
+        fi
+
+        # Process YAML Files
+        for file in deploy/*/regional.yaml; do
+            [ -e "$file" ] || continue
+
+            ACCOUNT_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('account_id', ''))")
+            REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('region', ''))")
+            ALIAS=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('alias', ''))")
+
+            if [[ -z "$ACCOUNT_ID" || -z "$REGION" ]]; then
+                echo "Skipping invalid config: $file"
+                continue
+            fi
+
+            bootstrap_target "$ACCOUNT_ID" "$REGION" "$ALIAS"
+        done
+
+  post_build:
+    commands:
+      - echo "ArgoCD bootstrap complete."
+      - echo "Regional cluster is now fully provisioned and ready for use."
+
+artifacts:
+  files:
+    - '**/*'

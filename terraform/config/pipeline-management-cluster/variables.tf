@@ -20,12 +20,6 @@ variable "region" {
   default     = "us-east-1"
 }
 
-variable "assume_role_arn" {
-  description = "Role ARN to assume for provisioning resources (Cross-Account)"
-  type        = string
-  default     = null
-}
-
 # Optional variables for manual/single-target deployment
 variable "target_account_id" {
   type        = string

@@ -13,103 +13,90 @@ phases:
       - curl -O https://releases.hashicorp.com/terraform/1.14.3/terraform_1.14.3_linux_amd64.zip
       - unzip -o terraform_1.14.3_linux_amd64.zip -d /tmp/tf-bin
       - mv /tmp/tf-bin/terraform /usr/local/bin/
-      - echo "Installing kubectl..."
-      - curl -LO "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
-      - chmod +x kubectl
-      - mv kubectl /usr/local/bin/
-      - chmod +x scripts/validate-argocd-config.sh scripts/bootstrap-argocd.sh
+      - terraform version
 
   build:
     commands:
-      - echo "Processing Regional Configurations..."
+      - echo "Validating Regional Cluster Configurations..."
       - |
-        process_target() {
+        validate_target() {
             local ACCOUNT_ID=$1
             local REGION=$2
             local ALIAS=$3
-            local TARGET_DIR=${4:-$3}
-            
+
             echo "---------------------------------------------------"
-            echo "Processing Target: $ALIAS ($ACCOUNT_ID) in $REGION"
-            
+            echo "Validating Target: $ALIAS ($ACCOUNT_ID) in $REGION"
+
             local ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/OrganizationAccountAccessRole"
-            
-            # ---------------------------------------------------------
-            # Step 1: Provision Regional Cluster (EKS)
-            # ---------------------------------------------------------
-            echo "Step 1: Provisioning Regional Cluster..."
-            
+
             export TF_VAR_assume_role_arn=$ROLE_ARN
-            
             export TF_STATE_BUCKET="terraform-state-$(aws sts get-caller-identity --query Account --output text)"
             export TF_STATE_KEY="regional-cluster/${ALIAS}.tfstate"
-            
+
             # Dynamically detect bucket region
             BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
             if [ "$BUCKET_REGION" == "None" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
             export TF_STATE_REGION=$BUCKET_REGION
-            
-            # Skip ArgoCD validation for infra provisioning
-            export SKIP_ARGOCD_VALIDATION=true
-            
+
             export TF_VAR_region_name=$REGION
             export TF_VAR_app_code="infra"
             export TF_VAR_service_phase="prod"
             export TF_VAR_cost_center="000"
             export TF_VAR_repository_url="https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}.git"
             export TF_VAR_repository_branch="${GITHUB_BRANCH:-main}"
-            
-            echo "Deploying Regional Cluster..."
-            make pipeline-provision-regional
-            
-            # ---------------------------------------------------------
-            # Step 2: Provision Regional Pipeline (Infrastructure)
-            # ---------------------------------------------------------
-            echo "Step 2: Deploying Regional Pipeline Infrastructure..."
-            cd terraform/config/regional-infra
-            
-            TF_STATE_KEY_INFRA="regional-infra/${ALIAS}.tfstate"
-            
-            echo "Initializing Terraform for Regional Infra..."
+
+            echo "Initializing Terraform..."
+            cd terraform/config/regional-cluster
             terraform init \
                 -backend-config="bucket=$TF_STATE_BUCKET" \
-                -backend-config="key=$TF_STATE_KEY_INFRA" \
+                -backend-config="key=$TF_STATE_KEY" \
                 -backend-config="region=$TF_STATE_REGION" \
                 -backend-config="use_lockfile=true"
-                
-            export TF_VAR_region=$REGION
-            export TF_VAR_github_repo_owner=$GITHUB_REPO_OWNER
-            export TF_VAR_github_repo_name=$GITHUB_REPO_NAME
-            export TF_VAR_github_branch="${GITHUB_BRANCH:-main}"
-            export TF_VAR_assume_role_arn=$ROLE_ARN
-            export TF_VAR_target_alias=$TARGET_DIR
-            
-            echo "Applying Terraform for Regional Infra..."
-            terraform apply -auto-approve
-            
-            rm -rf .terraform .terraform.lock.hcl
-            cd -
+
+            echo "Validating Terraform configuration..."
+            terraform validate
+
+            echo "Running Terraform plan..."
+            terraform plan -out=tfplan
+
+            # Save plan summary
+            terraform show -no-color tfplan > plan-summary.txt
+            echo "Plan summary saved to plan-summary.txt"
+
+            cd ../../..
         }
 
-        # 1. Process Manual Overrides if present
+        # Process Manual Overrides if present
         if [[ -n "$MANUAL_TARGET_ACCOUNT_ID" && -n "$MANUAL_TARGET_REGION" && -n "$MANUAL_TARGET_ALIAS" ]]; then
             echo "Detected Manual Configuration Override."
-            process_target "$MANUAL_TARGET_ACCOUNT_ID" "$MANUAL_TARGET_REGION" "$MANUAL_TARGET_ALIAS"
+            validate_target "$MANUAL_TARGET_ACCOUNT_ID" "$MANUAL_TARGET_REGION" "$MANUAL_TARGET_ALIAS"
         fi
 
-        # 2. Process YAML Files
+        # Process YAML Files
         for file in deploy/*/regional.yaml; do
             [ -e "$file" ] || continue
-            
+
             ACCOUNT_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('account_id', ''))")
             REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('region', ''))")
             ALIAS=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('alias', ''))")
-            
+
             if [[ -z "$ACCOUNT_ID" || -z "$REGION" ]]; then
                 echo "Skipping invalid config: $file"
                 continue
             fi
 
-            DIR_NAME=$(basename $(dirname "$file"))
-            process_target "$ACCOUNT_ID" "$REGION" "$ALIAS" "$DIR_NAME"
+            validate_target "$ACCOUNT_ID" "$REGION" "$ALIAS"
         done
+
+  post_build:
+    commands:
+      - echo "Validation complete."
+      - |
+        if [ -f terraform/config/regional-cluster/plan-summary.txt ]; then
+          echo "=== Terraform Plan Summary ==="
+          cat terraform/config/regional-cluster/plan-summary.txt
+        fi
+
+artifacts:
+  files:
+    - '**/*'
