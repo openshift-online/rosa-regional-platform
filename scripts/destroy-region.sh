@@ -34,7 +34,6 @@ fi
 # We assume the user is running this with credentials for the CENTRAL account (where state lives).
 CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
-TF_STATE_DYNAMODB_TABLE="terraform-locks"
 
 # Detect Bucket Region
 if ! BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text 2>/dev/null); then
@@ -96,7 +95,7 @@ terraform init \
     -backend-config="bucket=$TF_STATE_BUCKET" \
     -backend-config="key=$TF_STATE_KEY" \
     -backend-config="region=$TF_STATE_REGION" \
-    -backend-config="dynamodb_table=$TF_STATE_DYNAMODB_TABLE"
+    -backend-config="use_lockfile=true"
 
 echo "Destroying Regional Cluster Resources..."
 terraform destroy -auto-approve
@@ -121,7 +120,7 @@ terraform init \
     -backend-config="bucket=$TF_STATE_BUCKET" \
     -backend-config="key=$TF_STATE_KEY_INFRA" \
     -backend-config="region=$TF_STATE_REGION" \
-    -backend-config="dynamodb_table=$TF_STATE_DYNAMODB_TABLE"
+    -backend-config="use_lockfile=true"
 
 echo "Destroying Regional Infra Resources..."
 terraform destroy -auto-approve

@@ -146,6 +146,25 @@ resource "aws_s3_bucket" "pipeline_artifact" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "pipeline_artifact" {
+  bucket = aws_s3_bucket.pipeline_artifact.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "pipeline_artifact" {
+  bucket = aws_s3_bucket.pipeline_artifact.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
+}
+
 # CodeBuild Project
 resource "aws_codebuild_project" "central_builder" {
   name          = "central-regional-provisioner"

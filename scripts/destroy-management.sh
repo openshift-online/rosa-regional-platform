@@ -51,7 +51,6 @@ fi
 # We assume the user is running this with credentials for the REGIONAL account.
 REGIONAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 TF_STATE_BUCKET="terraform-state-management-${REGIONAL_ACCOUNT_ID}"
-TF_STATE_DYNAMODB_TABLE="terraform-locks-management"
 TF_STATE_KEY="management-cluster/${ALIAS}.tfstate"
 
 # Detect Bucket Region
@@ -92,7 +91,7 @@ terraform init \
     -backend-config="bucket=$TF_STATE_BUCKET" \
     -backend-config="key=$TF_STATE_KEY" \
     -backend-config="region=$TF_STATE_REGION" \
-    -backend-config="dynamodb_table=$TF_STATE_DYNAMODB_TABLE"
+    -backend-config="use_lockfile=true"
 
 # Set required variables for validation (values don't matter for destroy, but must be present)
 export TF_VAR_cluster_id="$ALIAS"
