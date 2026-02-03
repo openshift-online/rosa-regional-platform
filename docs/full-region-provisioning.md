@@ -263,16 +263,14 @@ This section provides comprehensive validation that both Regional and Management
 <details>
 <summary>🔍 Consumer Registration Verification</summary>
 
+
 ```bash
 # Verify the Management Cluster is properly registered
-./scripts/dev/bastion-connect.sh regional
+# Access the Frontend API, and query the registered consumers.
+# You can get the gateway api from the regional cluster terraform output
+✗ awscurl --service execute-api --region $REGION https://$API_GATEWAY_URL/prod/api/v0/management_clusters
 
-kubectl port-forward -n maestro-server svc/maestro-http 8080:8080 --address 0.0.0.0 & \
-PF_PID=$!; \
-sleep 5; \
-echo "Registered consumers:"; \
-curl -s http://localhost:8080/api/maestro/v1/consumers | jq -r '.items[] | "- \(.name) (labels: \(.labels))"'; \
-kill $PF_PID
+✗ awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.us-east-2.amazonaws.com/prod/api/v0/management_clusters | jq -r '.items[] | "- \(.name) (labels: \(.labels))"'
 ```
 
 **Expected Results:**
@@ -402,38 +400,21 @@ go run examples/manifestwork/client.go apply /tmp/maestro-test-manifestwork.json
 
 **Step 4: Monitor Distribution Status**
 
-```bash
-# List all ManifestWorks for the consumer
-echo ""
-echo "Listing ManifestWorks for consumer ${MC_CLUSTER_NAME}:"
-go run examples/manifestwork/client.go list \
-  --consumer-name=${MC_CLUSTER_NAME} \
-  --maestro-server=http://localhost:8080 \
-  --grpc-server=localhost:8090 \
-  --insecure-skip-verify
-
-# Get specific ManifestWork details
-echo ""
-echo "Getting details for maestro-payload-test-${TIMESTAMP}:"
-go run examples/manifestwork/client.go get maestro-payload-test-${TIMESTAMP} \
-  --consumer-name=${MC_CLUSTER_NAME} \
-  --maestro-server=http://localhost:8080 \
-  --grpc-server=localhost:8090 \
-  --insecure-skip-verify
-```
-
-**Step 5: Verify Payload on Management Cluster**
 
 ```bash
-# Switch to Management Cluster
-./scripts/dev/bastion-connect.sh management
+# We can query the manifestwork deployed by querying the resource_bundle resources through the API Gateway
+# List the current consumers
+✗ awscurl --service execute-api --region $REGION https://$API_GATEWAY_API/prod/api/v0/management_clusters
 
-echo "Verifying ConfigMap was created via Maestro MQTT distribution:"
-kubectl get configmap maestro-payload-test -n default -o yaml
+# List all ManifestWorks, jq to filter by consumer
+# you can avoid connecting to the remote system to verify.
+✗ awscurl --service execute-api --region $REGION https://$API_GATEWAY_API/prod/api/v0/resource_bundles
 
-echo ""
-echo "Checking payload data integrity:"
-kubectl get configmap maestro-payload-test -n default -o jsonpath='{.data}' | jq .
+# Example:
+✗ awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.us-east-2.amazonaws.com/prod/api/v0/management_clusters
+
+✗ awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.us-east-2.amazonaws.com/prod/api/v0/resource_bundles | jq -r '.items[].status.resourceStatus[]'
 ```
+
 </details>
 
