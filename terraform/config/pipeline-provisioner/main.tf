@@ -153,7 +153,7 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
 
 # S3 Bucket for Artifacts
 resource "aws_s3_bucket" "pipeline_artifact" {
-  bucket_prefix = "pipeline-provisioner-artifacts-"
+  bucket = "pipeline-provisioner-artifacts-${data.aws_caller_identity.current.account_id}"
   force_destroy = true
 }
 
