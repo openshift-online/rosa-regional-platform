@@ -24,7 +24,7 @@ output "github_connection_status" {
 
 output "provisioner_role_arn" {
   description = "ARN of the IAM role used by the provisioner CodeBuild project"
-  value       = aws_iam_role.provisioner_codebuild.arn
+  value       = aws_iam_role.codebuild_role.arn
 }
 
 # =============================================================================
