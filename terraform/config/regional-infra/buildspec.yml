@@ -55,13 +55,11 @@ phases:
             
             # Generate override.tf for provider role assumption
             echo "Generating override.tf for cross-account access..."
-            cat <<EOF > terraform/config/management-cluster/override.tf
-            provider "aws" {
-              assume_role {
-                role_arn = "${ROLE_ARN}"
-              }
-            }
-            EOF
+            echo "provider \"aws\" {" > terraform/config/management-cluster/override.tf
+            echo "  assume_role {" >> terraform/config/management-cluster/override.tf
+            echo "    role_arn = \"${ROLE_ARN}\"" >> terraform/config/management-cluster/override.tf
+            echo "  }" >> terraform/config/management-cluster/override.tf
+            echo "}" >> terraform/config/management-cluster/override.tf
             
             # Export ASSUME_ROLE_ARN for scripts that need explicit assumption (like bootstrap-argocd.sh)
             export ASSUME_ROLE_ARN="${ROLE_ARN}"
