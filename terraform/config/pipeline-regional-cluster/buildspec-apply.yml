@@ -17,73 +17,10 @@ phases:
 
   build:
     commands:
-      - echo "Applying Regional Cluster Infrastructure..."
-      - |
-        apply_target() {
-            local ACCOUNT_ID=$1
-            local REGION=$2
-            local ALIAS=$3
-
-            echo "---------------------------------------------------"
-            echo "Applying Infrastructure: $ALIAS ($ACCOUNT_ID) in $REGION"
-
-            local ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/OrganizationAccountAccessRole"
-
-            export TF_VAR_assume_role_arn=$ROLE_ARN
-            export TF_STATE_BUCKET="terraform-state-$(aws sts get-caller-identity --query Account --output text)"
-            export TF_STATE_KEY="regional-cluster/${ALIAS}.tfstate"
-
-            # Dynamically detect bucket region
-            BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
-            if [ "$BUCKET_REGION" == "None" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
-            export TF_STATE_REGION=$BUCKET_REGION
-
-            export TF_VAR_region_name=$REGION
-            export TF_VAR_app_code="infra"
-            export TF_VAR_service_phase="prod"
-            export TF_VAR_cost_center="000"
-            export TF_VAR_repository_url="https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}.git"
-            export TF_VAR_repository_branch="${GITHUB_BRANCH:-main}"
-
-            echo "Initializing Terraform..."
-            cd terraform/config/regional-cluster
-            terraform init \
-                -backend-config="bucket=$TF_STATE_BUCKET" \
-                -backend-config="key=$TF_STATE_KEY" \
-                -backend-config="region=$TF_STATE_REGION" \
-                -backend-config="use_lockfile=true"
-
-            echo "Applying Terraform changes..."
-            terraform apply -auto-approve
-
-            echo "Saving Terraform outputs..."
-            terraform output -json > outputs.json
-            cat outputs.json
-
-            cd ../../..
-        }
-
-        # Process Manual Overrides if present
-        if [[ -n "$MANUAL_TARGET_ACCOUNT_ID" && -n "$MANUAL_TARGET_REGION" && -n "$MANUAL_TARGET_ALIAS" ]]; then
-            echo "Detected Manual Configuration Override."
-            apply_target "$MANUAL_TARGET_ACCOUNT_ID" "$MANUAL_TARGET_REGION" "$MANUAL_TARGET_ALIAS"
-        fi
-
-        # Process YAML Files
-        for file in deploy/*/regional.yaml; do
-            [ -e "$file" ] || continue
-
-            ACCOUNT_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('account_id', ''))")
-            REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('region', ''))")
-            ALIAS=$(python3 -c "import yaml; print(yaml.safe_load(open('$file')).get('alias', ''))")
-
-            if [[ -z "$ACCOUNT_ID" || -z "$REGION" ]]; then
-                echo "Skipping invalid config: $file"
-                continue
-            fi
-
-            apply_target "$ACCOUNT_ID" "$REGION" "$ALIAS"
-        done
+      - echo "Provisioning Regional Cluster Infrastructure..."
+      - make pipeline-provision-regional
+      - echo "Provisioning Maestro Agent IoT for Regional Cluster..."
+      - make provision-maestro-agent-iot-regional
 
   post_build:
     commands:

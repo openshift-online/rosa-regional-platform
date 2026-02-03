@@ -13,10 +13,86 @@ set -euo pipefail
 # - AWS CLI configured with central account credentials
 # - Terraform >= 1.14.3 installed
 # - GitHub repository set up
+#
+# Usage:
+#   ./bootstrap-central-account.sh [GITHUB_REPO_OWNER] [GITHUB_REPO_NAME] [GITHUB_BRANCH]
+#
+#   Or use environment variables:
+#   GITHUB_REPO_OWNER=myorg GITHUB_REPO_NAME=myrepo ./bootstrap-central-account.sh
+#
+#   Or run interactively (prompts for values)
 # =============================================================================
+
+# Show usage
+show_usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS] [GITHUB_REPO_OWNER] [GITHUB_REPO_NAME] [GITHUB_BRANCH]
+
+Bootstrap the central AWS account with pipeline infrastructure.
+
+ARGUMENTS:
+    GITHUB_REPO_OWNER    GitHub organization or user (e.g., 'myorg')
+    GITHUB_REPO_NAME     Repository name (e.g., 'rosa-regional-platform')
+    GITHUB_BRANCH        Branch name (default: 'main')
+
+OPTIONS:
+    -h, --help          Show this help message
+    -y, --yes           Skip confirmation prompts (non-interactive mode)
+
+ENVIRONMENT VARIABLES:
+    AUTO_APPROVE        Set to 'true' to skip confirmation prompts
+    GITHUB_REPO_OWNER   GitHub repository owner
+    GITHUB_REPO_NAME    GitHub repository name
+    GITHUB_BRANCH       Git branch to track (default: main)
+    AWS_PROFILE         AWS CLI profile to use
+
+EXAMPLES:
+    # Interactive mode (prompts for values)
+    $0
+
+    # With command-line arguments
+    $0 theautoroboto rosa-regional-platform after-pull
+
+    # With environment variables
+    GITHUB_REPO_OWNER=myorg GITHUB_REPO_NAME=myrepo $0
+
+    # Mix of arguments and defaults
+    $0 theautoroboto rosa-regional-platform
+EOF
+}
+
+# Parse flags
+AUTO_APPROVE="${AUTO_APPROVE:-false}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        -y|--yes)
+            AUTO_APPROVE=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+        *)
+            # First positional argument found, stop parsing flags
+            break
+            ;;
+    esac
+done
+
+# Determine repo root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "🚀 ROSA Regional Platform - Central Account Bootstrap"
 echo "======================================================"
+echo ""
+echo "Repository Root: $REPO_ROOT"
 echo ""
 
 # Check prerequisites
@@ -39,11 +115,43 @@ echo "✅ Authenticated as:"
 aws sts get-caller-identity
 echo ""
 
-# Prompt for GitHub details
-read -p "GitHub Repository Owner (e.g., your-org): " GITHUB_REPO_OWNER
-read -p "GitHub Repository Name (e.g., rosa-regional-platform): " GITHUB_REPO_NAME
-read -p "GitHub Branch [main]: " GITHUB_BRANCH
-GITHUB_BRANCH=${GITHUB_BRANCH:-main}
+# Parse command-line arguments or use environment variables with interactive fallback
+if [ $# -ge 1 ]; then
+    # Command-line arguments provided
+    GITHUB_REPO_OWNER="$1"
+    GITHUB_REPO_NAME="${2:-}"
+    GITHUB_BRANCH="${3:-main}"
+else
+    # Check environment variables first, then prompt
+    if [ -z "${GITHUB_REPO_OWNER:-}" ]; then
+        read -p "GitHub Repository Owner (e.g., your-org): " GITHUB_REPO_OWNER
+    fi
+
+    if [ -z "${GITHUB_REPO_NAME:-}" ]; then
+        read -p "GitHub Repository Name (e.g., rosa-regional-platform): " GITHUB_REPO_NAME
+    fi
+
+    if [ -z "${GITHUB_BRANCH:-}" ]; then
+        read -p "GitHub Branch [main]: " input_branch
+        GITHUB_BRANCH="${input_branch:-main}"
+    fi
+fi
+
+# Validate inputs
+if [ -z "$GITHUB_REPO_OWNER" ]; then
+    echo "❌ Error: GitHub Repository Owner is required"
+    echo "   Provide via: command-line argument, environment variable, or interactive prompt"
+    exit 1
+fi
+
+if [ -z "$GITHUB_REPO_NAME" ]; then
+    echo "❌ Error: GitHub Repository Name is required"
+    echo "   Provide via: command-line argument, environment variable, or interactive prompt"
+    exit 1
+fi
+
+# Set default branch if not provided
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
 
 echo ""
 echo "Configuration:"
@@ -53,10 +161,14 @@ echo "  GitHub Repo:        $GITHUB_REPO_OWNER/$GITHUB_REPO_NAME"
 echo "  GitHub Branch:      $GITHUB_BRANCH"
 echo ""
 
-read -p "Continue with bootstrap? [y/N]: " CONFIRM
-if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
-    echo "❌ Bootstrap cancelled."
-    exit 1
+if [ "$AUTO_APPROVE" != "true" ]; then
+    read -p "Continue with bootstrap? [y/N]: " CONFIRM
+    if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+        echo "❌ Bootstrap cancelled."
+        exit 1
+    fi
+else
+    echo "✅ Auto-approve enabled, continuing..."
 fi
 
 echo ""
@@ -68,7 +180,7 @@ echo "==================================================="
 STATE_BUCKET="terraform-state-${ACCOUNT_ID}"
 LOCK_TABLE="terraform-locks"
 
-./scripts/bootstrap-state.sh "$REGION"
+"${REPO_ROOT}/scripts/bootstrap-state.sh" "$REGION"
 
 echo "✅ State infrastructure created:"
 echo "   Bucket: $STATE_BUCKET"
@@ -79,7 +191,7 @@ echo "==================================================="
 echo "Step 2: Deploying Pipeline Infrastructure"
 echo "==================================================="
 
-cd terraform/config/bootstrap-pipeline
+cd "${REPO_ROOT}/terraform/config/bootstrap-pipeline"
 
 # Initialize Terraform
 echo "Initializing Terraform..."
@@ -106,11 +218,15 @@ echo "Running Terraform plan..."
 terraform plan -var-file=terraform.tfvars -out=tfplan
 
 echo ""
-read -p "Apply this plan? [y/N]: " APPLY_CONFIRM
-if [ "$APPLY_CONFIRM" != "y" ] && [ "$APPLY_CONFIRM" != "Y" ]; then
-    echo "❌ Terraform apply cancelled."
-    cd ../../..
-    exit 1
+if [ "$AUTO_APPROVE" != "true" ]; then
+    read -p "Apply this plan? [y/N]: " APPLY_CONFIRM
+    if [ "$APPLY_CONFIRM" != "y" ] && [ "$APPLY_CONFIRM" != "Y" ]; then
+        echo "❌ Terraform apply cancelled."
+        cd "${REPO_ROOT}"
+        exit 1
+    fi
+else
+    echo "✅ Auto-approve enabled, applying plan..."
 fi
 
 # Apply
@@ -136,4 +252,4 @@ echo "   - Regional:    deploy/<name>/regional.yaml"
 echo "   - Management:  deploy/<name>/management/*.yaml"
 echo ""
 
-cd ../../..
+cd "${REPO_ROOT}"

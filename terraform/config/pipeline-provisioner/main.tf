@@ -5,14 +5,15 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+# GitHub Connection
 resource "aws_codestarconnections_connection" "github" {
-  name          = "regional-github-connection"
+  name          = "pipeline-provisioner-github"
   provider_type = "GitHub"
 }
 
 # IAM Role for CodeBuild
 resource "aws_iam_role" "codebuild_role" {
-  name = "regional-codebuild-role"
+  name = "pipeline-provisioner-codebuild"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -41,10 +42,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = [
-          "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${aws_codebuild_project.regional_builder.name}",
-          "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${aws_codebuild_project.regional_builder.name}:*"
-        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
@@ -59,8 +57,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Resource = [
           aws_s3_bucket.pipeline_artifact.arn,
           "${aws_s3_bucket.pipeline_artifact.arn}/*",
-          aws_s3_bucket.management_state.arn,
-          "${aws_s3_bucket.management_state.arn}/*"
+          "arn:aws:s3:::terraform-state-*",
+          "arn:aws:s3:::terraform-state-*/*"
         ]
       },
       {
@@ -68,15 +66,29 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Action = [
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:LockItem"
+          "dynamodb:DeleteItem"
         ]
-        Resource = aws_dynamodb_table.management_locks.arn
+        Resource = "arn:aws:dynamodb:*:*:table/terraform-locks*"
       },
       {
-        Effect   = "Allow"
-        Action   = "sts:AssumeRole"
-        Resource = "arn:aws:iam::*:role/OrganizationAccountAccessRole"
+        Effect = "Allow"
+        Action = [
+          "codepipeline:*",
+          "codebuild:*",
+          "codestar-connections:*",
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:PassRole",
+          "s3:CreateBucket",
+          "s3:DeleteBucket",
+          "s3:PutBucketVersioning",
+          "s3:PutBucketPublicAccessBlock",
+          "s3:PutEncryptionConfiguration"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -84,7 +96,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
 
 # IAM Role for CodePipeline
 resource "aws_iam_role" "codepipeline_role" {
-  name = "regional-codepipeline-role"
+  name = "pipeline-provisioner-pipeline"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -133,14 +145,7 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
           "codebuild:BatchGetBuilds",
           "codebuild:StartBuild"
         ]
-        Resource = aws_codebuild_project.regional_builder.arn
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "codebuild:StartBuild"
-        ]
-        Resource = "arn:aws:codebuild:*:*:project/${aws_codebuild_project.regional_builder.name}"
+        Resource = aws_codebuild_project.provisioner.arn
       }
     ]
   })
@@ -148,8 +153,18 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
 
 # S3 Bucket for Artifacts
 resource "aws_s3_bucket" "pipeline_artifact" {
-  bucket_prefix = "regional-pipeline-artifacts-"
+  bucket_prefix = "pipeline-provisioner-artifacts-"
   force_destroy = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "pipeline_artifact" {
+  bucket = aws_s3_bucket.pipeline_artifact.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "pipeline_artifact" {
@@ -161,9 +176,9 @@ resource "aws_s3_bucket_public_access_block" "pipeline_artifact" {
   restrict_public_buckets = true
 }
 
-# CodeBuild Project
-resource "aws_codebuild_project" "regional_builder" {
-  name          = "regional-management-provisioner"
+# CodeBuild Project - Pipeline Provisioner
+resource "aws_codebuild_project" "provisioner" {
+  name          = "pipeline-provisioner"
   service_role  = aws_iam_role.codebuild_role.arn
   build_timeout = 60
 
@@ -178,32 +193,28 @@ resource "aws_codebuild_project" "regional_builder" {
     image_pull_credentials_type = "CODEBUILD"
 
     environment_variable {
-      name  = "MANUAL_TARGET_ACCOUNT_ID"
-      value = var.target_account_id
+      name  = "GITHUB_REPO_OWNER"
+      value = var.github_repo_owner
     }
     environment_variable {
-      name  = "MANUAL_TARGET_REGION"
-      value = var.target_region
+      name  = "GITHUB_REPO_NAME"
+      value = var.github_repo_name
     }
     environment_variable {
-      name  = "MANUAL_TARGET_ALIAS"
-      value = var.target_alias
-    }
-    environment_variable {
-      name  = "TARGET_ALIAS"
-      value = var.target_alias
+      name  = "GITHUB_BRANCH"
+      value = var.github_branch
     }
   }
 
   source {
     type      = "CODEPIPELINE"
-    buildspec = "terraform/config/pipeline-management-cluster/buildspec.yml"
+    buildspec = "terraform/config/pipeline-provisioner/buildspec.yml"
   }
 }
 
-# CodePipeline
-resource "aws_codepipeline" "regional_pipeline" {
-  name          = "regional-management-pipeline"
+# CodePipeline - Pipeline Provisioner
+resource "aws_codepipeline" "provisioner" {
+  name          = "pipeline-provisioner"
   role_arn      = aws_iam_role.codepipeline_role.arn
   pipeline_type = "V2"
 
@@ -221,7 +232,7 @@ resource "aws_codepipeline" "regional_pipeline" {
           includes = [var.github_branch]
         }
         file_paths {
-          includes = ["deploy/${var.target_alias}/management/**", "terraform/config/pipeline-management-cluster/**"]
+          includes = ["deploy/**", "terraform/config/pipeline-regional-cluster/**", "terraform/config/pipeline-management-cluster/**"]
         }
       }
     }
@@ -242,23 +253,25 @@ resource "aws_codepipeline" "regional_pipeline" {
         ConnectionArn    = aws_codestarconnections_connection.github.arn
         FullRepositoryId = "${var.github_repo_owner}/${var.github_repo_name}"
         BranchName       = var.github_branch
+        DetectChanges    = "true"
       }
     }
   }
 
   stage {
-    name = "Build"
+    name = "Provision"
 
     action {
-      name            = "ProvisionManagementCluster"
-      category        = "Build"
-      owner           = "AWS"
-      provider        = "CodeBuild"
-      input_artifacts = ["source_output"]
-      version         = "1"
+      name             = "ProvisionPipelines"
+      category         = "Build"
+      owner            = "AWS"
+      provider         = "CodeBuild"
+      input_artifacts  = ["source_output"]
+      output_artifacts = ["provision_output"]
+      version          = "1"
 
       configuration = {
-        ProjectName = aws_codebuild_project.regional_builder.name
+        ProjectName = aws_codebuild_project.provisioner.name
       }
     }
   }

@@ -89,7 +89,10 @@ phases:
             # Run Provision
             echo "Running Provisioning..."
             make pipeline-provision-management
-            
+
+            echo "Provisioning Maestro Agent IoT for Management Cluster..."
+            make provision-maestro-agent-iot-management
+
             # Cleanup
             rm -f terraform/config/management-cluster/override.tf
             unset ASSUME_ROLE_ARN

@@ -31,12 +31,3 @@ resource "aws_dynamodb_table" "management_locks" {
     type = "S"
   }
 }
-
-# Output the bucket name so it's easy to verify
-output "management_state_bucket" {
-  value = aws_s3_bucket.management_state.id
-}
-
-output "management_lock_table" {
-  value = aws_dynamodb_table.management_locks.name
-}
