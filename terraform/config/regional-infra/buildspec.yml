@@ -50,9 +50,18 @@ phases:
             
             export TF_STATE_DYNAMODB_TABLE="terraform-locks-management"
 
+            # Export Terraform Variables for Management Cluster
+            export TF_VAR_app_code="infra"
+            export TF_VAR_service_phase="prod"
+            export TF_VAR_cost_center="000"
+            export TF_VAR_cluster_id="${ALIAS}"
+            export TF_VAR_regional_aws_account_id="${REGIONAL_ACCOUNT_ID}"
+            export TF_VAR_repository_url="${CODEBUILD_SOURCE_REPO_URL:-https://github.com/placeholder/repo.git}"
+            export TF_VAR_repository_branch="${CODEBUILD_SOURCE_VERSION:-main}"
+
             # Skip ArgoCD validation for infra provisioning
             export SKIP_ARGOCD_VALIDATION=true
-            
+
             # Generate override.tf for provider role assumption
             echo "Generating override.tf for cross-account access..."
             echo "provider \"aws\" {" > terraform/config/management-cluster/override.tf
