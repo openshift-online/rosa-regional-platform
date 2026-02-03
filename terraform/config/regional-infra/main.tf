@@ -151,6 +151,16 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
 # S3 Bucket for Artifacts
 resource "aws_s3_bucket" "pipeline_artifact" {
   bucket_prefix = "regional-pipeline-artifacts-"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "pipeline_artifact" {
+  bucket = aws_s3_bucket.pipeline_artifact.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
 }
 
 # CodeBuild Project
