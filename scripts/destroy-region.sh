@@ -114,6 +114,30 @@ cd "${REPO_ROOT}/terraform/config/regional-infra"
 
 TF_STATE_KEY_INFRA="regional-infra/${ALIAS}.tfstate"
 
+# Cleanup Pipeline Artifacts Bucket (to avoid destroy failure if not empty)
+echo "Cleaning up Pipeline Artifacts in Regional Account..."
+CREDS=$(aws sts assume-role --role-arn $ROLE_ARN --role-session-name RegionalCleanup --output json)
+export AWS_ACCESS_KEY_ID=$(echo $CREDS | jq -r .Credentials.AccessKeyId)
+export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | jq -r .Credentials.SecretAccessKey)
+export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r .Credentials.SessionToken)
+
+# Find buckets starting with regional-pipeline-artifacts-
+BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, 'regional-pipeline-artifacts-')].Name" --output text)
+for BUCKET in $BUCKETS; do
+    if [ "$BUCKET" == "None" ]; then continue; fi
+    # Check region
+    LOC=$(aws s3api get-bucket-location --bucket $BUCKET --query LocationConstraint --output text 2>/dev/null)
+    if [ "$LOC" == "None" ]; then LOC="us-east-1"; fi
+    
+    if [ "$LOC" == "$REGION" ]; then
+        echo "Emptying bucket: $BUCKET"
+        aws s3 rm "s3://${BUCKET}" --recursive
+    fi
+done
+
+# Revert to Central Account credentials for Terraform Backend access
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
 echo "Initializing Terraform (Regional Infra)..."
 terraform init \
     -reconfigure \
