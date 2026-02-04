@@ -78,3 +78,37 @@ variable "maestro_mqtt_topic_prefix" {
   type        = string
   default     = "maestro/consumers"
 }
+
+# =============================================================================
+# Authorization Configuration Variables
+# =============================================================================
+
+variable "authz_billing_mode" {
+  description = "DynamoDB billing mode for authz tables"
+  type        = string
+  default     = "PAY_PER_REQUEST"
+}
+
+variable "authz_enable_pitr" {
+  description = "Enable point-in-time recovery for authz DynamoDB tables (recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "authz_deletion_protection" {
+  description = "Enable deletion protection for authz DynamoDB tables (recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "authz_frontend_api_namespace" {
+  description = "Kubernetes namespace for Frontend API (used for Pod Identity)"
+  type        = string
+  default     = "rosa-frontend-api"
+}
+
+variable "authz_frontend_api_service_account" {
+  description = "Kubernetes service account name for Frontend API (used for Pod Identity)"
+  type        = string
+  default     = "rosa-frontend-api"
+}

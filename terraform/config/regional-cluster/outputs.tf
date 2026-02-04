@@ -215,3 +215,51 @@ output "maestro_configuration_summary" {
   value       = module.maestro_infrastructure.maestro_configuration_summary
   sensitive   = false
 }
+
+# =============================================================================
+# Authorization Outputs
+# =============================================================================
+
+# DynamoDB Tables
+output "authz_accounts_table_name" {
+  description = "Authz accounts DynamoDB table name"
+  value       = module.authz.accounts_table_name
+}
+
+output "authz_admins_table_name" {
+  description = "Authz admins DynamoDB table name"
+  value       = module.authz.admins_table_name
+}
+
+output "authz_groups_table_name" {
+  description = "Authz groups DynamoDB table name"
+  value       = module.authz.groups_table_name
+}
+
+output "authz_members_table_name" {
+  description = "Authz group members DynamoDB table name"
+  value       = module.authz.members_table_name
+}
+
+output "authz_policies_table_name" {
+  description = "Authz policies DynamoDB table name"
+  value       = module.authz.policies_table_name
+}
+
+output "authz_attachments_table_name" {
+  description = "Authz attachments DynamoDB table name"
+  value       = module.authz.attachments_table_name
+}
+
+# IAM Role
+output "authz_frontend_api_role_arn" {
+  description = "IAM role ARN for Frontend API with authz permissions (Pod Identity)"
+  value       = module.authz.frontend_api_role_arn
+}
+
+# Configuration Summary
+output "authz_configuration_summary" {
+  description = "Complete authz configuration for use in Helm values"
+  value       = module.authz.authz_configuration_summary
+  sensitive   = false
+}
