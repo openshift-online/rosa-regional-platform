@@ -46,9 +46,10 @@ variable "enable_bastion" {
 # Frontend API Variables
 # =============================================================================
 
-variable "api_allowed_accounts" {
-  description = "Frontend API allowed accounts, comma list of account ids"
+variable "api_additional_allowed_accounts" {
+  description = "Additional AWS account IDs allowed to access the Frontend API (comma-separated). The current account is automatically included."
   type        = string
+  default     = ""
 }
 
 # Maestro Configuration Variables

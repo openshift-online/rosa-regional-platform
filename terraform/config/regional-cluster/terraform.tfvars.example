@@ -43,9 +43,13 @@ repository_branch = "main"
 
 # AWS region name (required for API Gateway URL construction)
 region_name = "test"
-# Multiple accoutns are defined like this due to helm: 
-# api_allowed_accounts = "111111111111\,222222222222\,333333333333"
-api_allowed_accounts = "123456789012"
+
+# Additional AWS account IDs allowed to access the Frontend API (optional)
+# The current account is automatically included - only specify additional accounts here
+# Multiple accounts are comma-separated (use backslash escaping for Helm compatibility):
+# api_additional_allowed_accounts = "111111111111\,222222222222\,333333333333"
+# api_additional_allowed_accounts = "111111111111"  # Single additional account
+# api_additional_allowed_accounts = ""              # No additional accounts (default)
 
 # Maestro Infrastructure Configuration
 

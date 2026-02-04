@@ -13,6 +13,12 @@ provider "aws" {
   }
 }
 
+# =============================================================================
+# Data Sources
+# =============================================================================
+
+data "aws_caller_identity" "current" {}
+
 # Call the EKS cluster module for regional cluster infrastructure
 module "regional_cluster" {
   source = "../../modules/eks-cluster"
