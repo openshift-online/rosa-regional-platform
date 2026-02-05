@@ -63,6 +63,6 @@ output "next_steps" {
     4. See deploy/README.md for detailed configuration instructions
 
     5. Example configuration files are available in:
-       - deploy/fedramp-us-east-1/
+       - deploy/us-east-1/
   EOT
 }

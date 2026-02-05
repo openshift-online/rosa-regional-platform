@@ -39,6 +39,8 @@ Run the bootstrap script to create the S3 bucket for Terraform state (uses lockf
 # Note the bucket name output, e.g., terraform-state-123456789012
 ```
 
+> **NOTE:** The `bootstrap-state.sh` script creates the state bucket required for all Terraform operations in the central account. Operators must run this bootstrap step first and capture the bucket name for use in subsequent `terraform init` commands. This bucket stores state for both the Pipeline Provisioner and individual Regional/Management cluster pipelines.
+
 ### Step 2: Deploy Central Pipeline
 Initialize and apply the Terraform configuration for the Central Pipeline.
 
