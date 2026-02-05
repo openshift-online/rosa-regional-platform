@@ -1,0 +1,26 @@
+version: 0.2
+
+env:
+  variables:
+    PIPELINE_STAGE: "management-cluster"
+
+phases:
+  pre_build:
+    commands:
+      - echo "=== Management Cluster Provisioning ==="
+      - echo "Assuming cross-account role:" $MANAGEMENT_ROLE_ARN
+      - ASSUME_ROLE_OUTPUT=$(aws sts assume-role --role-arn "$MANAGEMENT_ROLE_ARN" --role-session-name "pipeline-management-$(date +%s)" --output json)
+      - export AWS_ACCESS_KEY_ID=$(echo "$ASSUME_ROLE_OUTPUT" | jq -r '.Credentials.AccessKeyId')
+      - export AWS_SECRET_ACCESS_KEY=$(echo "$ASSUME_ROLE_OUTPUT" | jq -r '.Credentials.SecretAccessKey')
+      - export AWS_SESSION_TOKEN=$(echo "$ASSUME_ROLE_OUTPUT" | jq -r '.Credentials.SessionToken')
+      - echo "Caller identity:"
+      - aws sts get-caller-identity
+
+  build:
+    commands:
+      - echo "Implement me!"
+
+artifacts:
+  files:
+    - '**/*'
+  name: management-cluster-outputs
