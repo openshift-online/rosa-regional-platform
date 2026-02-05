@@ -15,6 +15,9 @@ resource "aws_security_group" "vpc_link" {
   description = "Security group for API Gateway VPC Link"
   vpc_id      = var.vpc_id
 
+  # Prevent Terraform from trying to detach VPC Link-managed ENIs
+  revoke_rules_on_delete = false
+
   tags = {
     Name = "${var.resource_name_base}-api-vpc-link"
   }
@@ -37,6 +40,9 @@ resource "aws_security_group" "alb" {
   name        = "${var.resource_name_base}-api-alb"
   description = "Security group for internal API ALB"
   vpc_id      = var.vpc_id
+
+  # Prevent Terraform from trying to detach ALB-managed ENIs
+  revoke_rules_on_delete = false
 
   tags = {
     Name = "${var.resource_name_base}-api-alb"

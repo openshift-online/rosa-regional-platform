@@ -1,0 +1,87 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies for ArgoCD bootstrap..."
+      - yum install -y jq
+      - echo "Installing kubectl..."
+      - curl -LO "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
+      - chmod +x scripts/bootstrap-argocd.sh
+      - echo "Installing Terraform (needed to read outputs)..."
+      - curl -O https://releases.hashicorp.com/terraform/1.14.3/terraform_1.14.3_linux_amd64.zip
+      - unzip -o terraform_1.14.3_linux_amd64.zip -d /tmp/tf-bin
+      - mv /tmp/tf-bin/terraform /usr/local/bin/
+      - terraform version
+
+  build:
+    commands:
+      - echo "=========================================="
+      - echo "ArgoCD Bootstrap for Management Cluster"
+      - echo "=========================================="
+      - |
+        # Validate required environment variables
+        if [[ -z "$TARGET_ACCOUNT_ID" || -z "$TARGET_REGION" || -z "$TARGET_ALIAS" ]]; then
+            echo "❌ ERROR: Required environment variables not set"
+            echo "   TARGET_ACCOUNT_ID: ${TARGET_ACCOUNT_ID}"
+            echo "   TARGET_REGION: ${TARGET_REGION}"
+            echo "   TARGET_ALIAS: ${TARGET_ALIAS}"
+            exit 1
+        fi
+
+        echo "Target Account: ${TARGET_ACCOUNT_ID}"
+        echo "Target Region: ${TARGET_REGION}"
+        echo "Target Alias: ${TARGET_ALIAS}"
+        echo "Target Environment: ${TARGET_ENVIRONMENT:-integration}"
+
+        # Get central account ID
+        CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "Central Account: ${CENTRAL_ACCOUNT_ID}"
+
+        # Define role ARN for cross-account access
+        ROLE_ARN="arn:aws:iam::${TARGET_ACCOUNT_ID}:role/OrganizationAccountAccessRole"
+
+        # Generate override.tf for cross-account access
+        echo "Generating override.tf for cross-account access..."
+        echo 'provider "aws" {' > terraform/config/management-cluster/override.tf
+        echo "  region = \"${TARGET_REGION}\"" >> terraform/config/management-cluster/override.tf
+        echo '  assume_role {' >> terraform/config/management-cluster/override.tf
+        echo "    role_arn = \"${ROLE_ARN}\"" >> terraform/config/management-cluster/override.tf
+        echo '  }' >> terraform/config/management-cluster/override.tf
+        echo '}' >> terraform/config/management-cluster/override.tf
+
+        # Set Terraform backend config
+        export TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
+        export TF_STATE_KEY="management-cluster/${TARGET_ALIAS}.tfstate"
+
+        # Dynamically detect bucket region (uses central account creds)
+        BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
+        if [ "$BUCKET_REGION" == "None" ] || [ "$BUCKET_REGION" == "null" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
+        export TF_STATE_REGION=$BUCKET_REGION
+
+        # Initialize Terraform to read state
+        echo "Initializing Terraform to read outputs..."
+        cd terraform/config/management-cluster
+        terraform init -reconfigure \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${TF_STATE_REGION}" \
+            -backend-config="use_lockfile=true"
+        cd ../../..
+
+        # Export ASSUME_ROLE_ARN for bootstrap script
+        export ASSUME_ROLE_ARN="${ROLE_ARN}"
+
+        echo "Bootstrapping ArgoCD..."
+        scripts/bootstrap-argocd.sh management-cluster "${TARGET_ENVIRONMENT}" "${TARGET_REGION}"
+
+        # Cleanup
+        echo "Cleaning up..."
+        rm -f terraform/config/management-cluster/override.tf
+
+        echo "✅ ArgoCD bootstrap complete!"

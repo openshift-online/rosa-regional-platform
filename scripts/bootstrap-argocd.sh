@@ -19,10 +19,63 @@ fi
 
 TERRAFORM_DIR="terraform/config/${CLUSTER_TYPE}"
 
-# Read terraform outputs
+# Read terraform outputs BEFORE assuming role
+# (terraform state is in central account, so we need central account creds to read it)
 cd ${TERRAFORM_DIR}/
 
 OUTPUTS=$(terraform output -json)
+
+# Handle cross-account role assumption if ASSUME_ROLE_ARN is set
+# This is used when the script runs in CodeBuild to bootstrap a cluster in a different account
+# We assume the role AFTER reading terraform outputs because:
+# - Terraform state is in central account S3, needs central account creds
+# - ECS cluster/logs are in target account, need target account creds
+if [[ -n "${ASSUME_ROLE_ARN:-}" ]]; then
+    echo "🔐 Assuming role for AWS resource access: $ASSUME_ROLE_ARN"
+
+    # Attempt role assumption and capture output
+    if ! CREDS=$(aws sts assume-role \
+        --role-arn "$ASSUME_ROLE_ARN" \
+        --role-session-name "bootstrap-argocd" \
+        --output json 2>&1); then
+        echo "❌ Failed to assume role: $ASSUME_ROLE_ARN"
+        echo "AWS CLI error output:"
+        echo "$CREDS"
+        exit 1
+    fi
+
+    # Validate credentials were returned
+    if ! echo "$CREDS" | jq -e '.Credentials' >/dev/null 2>&1; then
+        echo "❌ Role assumption succeeded but credentials not found in response"
+        echo "Role ARN: $ASSUME_ROLE_ARN"
+        echo "Response:"
+        echo "$CREDS"
+        exit 1
+    fi
+
+    # Extract credentials using -er to fail on null/missing values
+    if ! AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -er '.Credentials.AccessKeyId'); then
+        echo "❌ Failed to extract AccessKeyId from assume-role response"
+        exit 1
+    fi
+
+    if ! AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -er '.Credentials.SecretAccessKey'); then
+        echo "❌ Failed to extract SecretAccessKey from assume-role response"
+        exit 1
+    fi
+
+    if ! AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -er '.Credentials.SessionToken'); then
+        echo "❌ Failed to extract SessionToken from assume-role response"
+        exit 1
+    fi
+
+    export AWS_ACCESS_KEY_ID
+    export AWS_SECRET_ACCESS_KEY
+    export AWS_SESSION_TOKEN
+
+    echo "✅ Role assumed successfully"
+    echo "   Account: $(aws sts get-caller-identity --query Account --output text)"
+fi
 
 ECS_CLUSTER_ARN=$(echo "$OUTPUTS" | jq -r '.ecs_cluster_arn.value')
 TASK_DEFINITION_ARN=$(echo "$OUTPUTS" | jq -r '.ecs_task_definition_arn.value')
@@ -87,22 +140,49 @@ else
 fi
 
 echo "Starting log monitoring..."
-aws logs tail "$LOG_GROUP" --follow &
-LOG_PID=$!
 
-# Clean up background log process on script exit or interrupt
+# Use filter-log-events for compatibility with older AWS CLI versions (no tail command)
+# Track the last seen event timestamp to avoid duplicate logs
+LAST_EVENT_TIME=0
+
+# Clean up on script exit or interrupt
 cleanup() {
-    if [[ -n "${LOG_PID:-}" ]]; then
-        kill $LOG_PID 2>/dev/null || true
-    fi
+    echo "" # Newline after log output
 }
 trap cleanup EXIT INT TERM
 
 # Monitor task status
 while true; do
+    # Fetch recent log events (last 30 seconds worth)
+    START_TIME=$(($(date +%s) * 1000 - 30000))
+    if [[ $LAST_EVENT_TIME -gt 0 ]]; then
+        START_TIME=$LAST_EVENT_TIME
+    fi
+
+    LOG_EVENTS=$(aws logs filter-log-events \
+        --log-group-name "$LOG_GROUP" \
+        --start-time "$START_TIME" \
+        --output json 2>/dev/null || echo '{"events":[]}')
+
+    # Print new log events
+    echo "$LOG_EVENTS" | jq -r '.events[] | .message' 2>/dev/null || true
+
+    # Update last event timestamp
+    NEW_LAST_TIME=$(echo "$LOG_EVENTS" | jq -r '[.events[].timestamp] | max // 0' 2>/dev/null || echo "0")
+    if [[ "$NEW_LAST_TIME" != "null" && "$NEW_LAST_TIME" != "0" ]]; then
+        LAST_EVENT_TIME=$NEW_LAST_TIME
+    fi
+
     TASK_STATUS=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER_ARN" --tasks "$TASK_ARN" --query 'tasks[0].lastStatus' --output text)
 
     if [[ "$TASK_STATUS" == "STOPPED" ]]; then
+        # Fetch any remaining logs after task stopped
+        sleep 2
+        FINAL_LOGS=$(aws logs filter-log-events \
+            --log-group-name "$LOG_GROUP" \
+            --start-time "$LAST_EVENT_TIME" \
+            --output json 2>/dev/null || echo '{"events":[]}')
+        echo "$FINAL_LOGS" | jq -r '.events[] | .message' 2>/dev/null || true
         echo ""
         echo "Task stopped. Getting task details..."
 
@@ -126,5 +206,6 @@ while true; do
         fi
     fi
 
-    sleep 10
+    # Poll every 5 seconds for log updates
+    sleep 5
 done

@@ -1,0 +1,215 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - yum install -y unzip python3 jq gnupg2
+      - pip3 install boto3 pyyaml
+      - echo "Installing Terraform..."
+      - |
+        set -euo pipefail
+        TF_VERSION="1.14.3"
+        TF_PACKAGE="terraform_${TF_VERSION}_linux_amd64.zip"
+        TF_BASE_URL="https://releases.hashicorp.com/terraform/${TF_VERSION}"
+
+        # Download Terraform package and verification files
+        echo "Downloading Terraform ${TF_VERSION}..."
+        curl -sSfO "${TF_BASE_URL}/${TF_PACKAGE}"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        # Import HashiCorp GPG key
+        echo "Importing HashiCorp GPG key..."
+        gpg --batch --keyserver keyserver.ubuntu.com --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver keys.openpgp.org --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver pgp.mit.edu --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F
+
+        # Verify GPG signature on SHA256SUMS
+        echo "Verifying GPG signature..."
+        if ! gpg --batch --verify "terraform_${TF_VERSION}_SHA256SUMS.sig" "terraform_${TF_VERSION}_SHA256SUMS"; then
+          echo "❌ GPG signature verification failed"
+          exit 1
+        fi
+        echo "✓ GPG signature verified"
+
+        # Verify checksum of Terraform package
+        echo "Verifying SHA256 checksum..."
+        if ! grep "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" | sha256sum -c -; then
+          echo "❌ Checksum verification failed"
+          exit 1
+        fi
+        echo "✓ Checksum verified"
+
+        # Install Terraform
+        echo "Installing Terraform..."
+        unzip -o "${TF_PACKAGE}" -d /tmp/tf-bin
+        mv /tmp/tf-bin/terraform /usr/local/bin/
+
+        # Cleanup
+        rm -f "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" "terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        terraform version
+        echo "✓ Terraform installation verified"
+
+  build:
+    commands:
+      - echo "Processing Management Cluster Configurations..."
+      - |
+        set -euo pipefail
+
+        process_target() {
+            local MANAGEMENT_ACCOUNT_ID=$1
+            local REGION=$2
+            local ALIAS=$3
+
+            echo "---------------------------------------------------"
+            echo "Processing Target: $ALIAS ($MANAGEMENT_ACCOUNT_ID) in $REGION"
+
+            # Get Central Account ID BEFORE assuming role
+            CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            echo "Central Account ID: $CENTRAL_ACCOUNT_ID"
+
+            # Define Role ARN
+            local ROLE_ARN="arn:aws:iam::${MANAGEMENT_ACCOUNT_ID}:role/OrganizationAccountAccessRole"
+
+            # Export Variables for Makefile / Terraform Backend
+            # State is stored in the Central Account (Current Account), but we use the Management Alias in the key
+            export TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
+            export TF_STATE_KEY="management-cluster/${ALIAS}.tfstate"
+
+            # Dynamically detect bucket region (uses Central Account Creds)
+            BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
+            if [ "$BUCKET_REGION" == "None" ] || [ "$BUCKET_REGION" == "null" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
+            export TF_STATE_REGION=$BUCKET_REGION
+
+            # Export Terraform Variables for Management Cluster
+            export TF_VAR_app_code="${APP_CODE}"
+            export TF_VAR_service_phase="${SERVICE_PHASE}"
+            export TF_VAR_cost_center="${COST_CENTER}"
+            export TF_VAR_cluster_id="${CLUSTER_ID}"
+            export TF_VAR_regional_aws_account_id="${REGIONAL_AWS_ACCOUNT_ID}"
+            export TF_VAR_repository_url="${REPOSITORY_URL}"
+            export TF_VAR_repository_branch="${REPOSITORY_BRANCH}"
+
+            # Skip ArgoCD validation for infra provisioning
+            export SKIP_ARGOCD_VALIDATION=true
+
+            # Generate override.tf for provider role assumption
+            echo "Generating override.tf for cross-account access..."
+            echo "provider \"aws\" {" > terraform/config/management-cluster/override.tf
+            echo "  region = \"${REGION}\"" >> terraform/config/management-cluster/override.tf
+            echo "  assume_role {" >> terraform/config/management-cluster/override.tf
+            echo "    role_arn = \"${ROLE_ARN}\"" >> terraform/config/management-cluster/override.tf
+            echo "  }" >> terraform/config/management-cluster/override.tf
+            echo "}" >> terraform/config/management-cluster/override.tf
+
+            # Create placeholder Maestro agent secrets in MANAGEMENT account
+            echo "Ensuring Maestro agent secrets exist in management account ${MANAGEMENT_ACCOUNT_ID}..."
+
+            # Get temporary credentials by assuming the management account role
+            echo "Assuming role: ${ROLE_ARN}"
+            if ! CREDS=$(aws sts assume-role --role-arn "${ROLE_ARN}" --role-session-name "secret-creation" --output json 2>&1); then
+                echo "❌ Failed to assume role: ${ROLE_ARN}"
+                echo "AWS CLI error output:"
+                echo "$CREDS"
+                exit 1
+            fi
+
+            # Validate credentials were returned
+            if ! echo "$CREDS" | jq -e '.Credentials' >/dev/null 2>&1; then
+                echo "❌ Role assumption succeeded but credentials not found in response"
+                echo "Role ARN: ${ROLE_ARN}"
+                echo "Response:"
+                echo "$CREDS"
+                exit 1
+            fi
+
+            MGMT_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.AccessKeyId')
+            MGMT_SECRET_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
+            MGMT_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
+
+            # Final validation that credentials are not null/empty
+            if [[ -z "$MGMT_ACCESS_KEY" || "$MGMT_ACCESS_KEY" == "null" ]]; then
+                echo "❌ Failed to extract valid credentials from assume-role response"
+                exit 1
+            fi
+
+            echo "✓ Successfully assumed role and extracted credentials"
+
+            for SECRET_NAME in "maestro/agent-cert" "maestro/agent-config"; do
+                # Check if secret exists in management account
+                if ! AWS_ACCESS_KEY_ID=$MGMT_ACCESS_KEY \
+                     AWS_SECRET_ACCESS_KEY=$MGMT_SECRET_KEY \
+                     AWS_SESSION_TOKEN=$MGMT_SESSION_TOKEN \
+                     aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region ${REGION} 2>/dev/null; then
+
+                    echo "Creating placeholder secret: $SECRET_NAME in management account"
+                    if ! CREATE_OUTPUT=$(AWS_ACCESS_KEY_ID=$MGMT_ACCESS_KEY \
+                        AWS_SECRET_ACCESS_KEY=$MGMT_SECRET_KEY \
+                        AWS_SESSION_TOKEN=$MGMT_SESSION_TOKEN \
+                        aws secretsmanager create-secret \
+                            --name "$SECRET_NAME" \
+                            --description "Placeholder secret for Maestro agent (created by buildspec)" \
+                            --secret-string '{"placeholder":true}' \
+                            --region ${REGION} 2>&1); then
+
+                        # Check if failure is due to secret already existing (race condition)
+                        if echo "$CREATE_OUTPUT" | grep -q "ResourceExistsException"; then
+                            echo "Secret $SECRET_NAME already exists (created concurrently)"
+                        else
+                            echo "❌ Failed to create secret $SECRET_NAME"
+                            echo "Error: $CREATE_OUTPUT"
+                            exit 1
+                        fi
+                    else
+                        echo "✓ Created secret $SECRET_NAME"
+                    fi
+                else
+                    echo "Secret $SECRET_NAME already exists in management account"
+                fi
+            done
+
+            echo "Maestro agent placeholder secrets verified in management account"
+
+            # Run Infrastructure Provision (without ArgoCD bootstrap)
+            echo "Running Infrastructure Provisioning..."
+            make pipeline-provision-management-infra
+            PROVISION_STATUS=$?
+
+            if [ $PROVISION_STATUS -ne 0 ]; then
+                echo "❌ Infrastructure provisioning failed with exit code $PROVISION_STATUS"
+                rm -f terraform/config/management-cluster/override.tf
+                exit $PROVISION_STATUS
+            fi
+
+            # Cleanup
+            echo "Cleaning up override.tf..."
+            rm -f terraform/config/management-cluster/override.tf
+
+            echo "✅ Infrastructure provisioning complete."
+        }
+
+        # Process the management cluster using variables passed by provisioner pipeline
+        if [[ -n "$TARGET_ACCOUNT_ID" && -n "$TARGET_REGION" && -n "$TARGET_ALIAS" ]]; then
+            echo "Deploying management cluster infrastructure: $TARGET_ALIAS"
+            process_target "$TARGET_ACCOUNT_ID" "$TARGET_REGION" "$TARGET_ALIAS"
+        else
+            echo "ERROR: TARGET_* variables not set. This pipeline should be created by the provisioner."
+            exit 1
+        fi
+
+  post_build:
+    commands:
+      - echo "Infrastructure deployment complete."
+      - echo "ArgoCD bootstrap will run in the next pipeline stage."
+
+artifacts:
+  files:
+    - '**/*'
