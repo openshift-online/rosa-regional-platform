@@ -142,7 +142,7 @@ phases:
         export ASSUME_ROLE_ARN="${ROLE_ARN}"
 
         echo "Bootstrapping ArgoCD..."
-        scripts/bootstrap-argocd.sh management-cluster "${TARGET_ENVIRONMENT}" "${TARGET_REGION}"
+        scripts/bootstrap-argocd.sh management-cluster "${TARGET_ENVIRONMENT:-integration}" "${TARGET_REGION}"
 
         # Cleanup
         echo "Cleaning up..."

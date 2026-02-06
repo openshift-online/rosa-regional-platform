@@ -64,7 +64,7 @@ terraform apply \
 ### Step 3: Authorize GitHub Connection
 1.  Log in to the **AWS Console (Central Account)**.
 2.  Go to **Developer Tools > Settings > Connections**.
-3.  Find `central-github-connection` (Status: Pending).
+3.  Find `pipeline-provisioner-github` (Status: Pending).
 4.  Click **"Update Pending Connection"** and authorize with GitHub.
 
 ---
@@ -86,7 +86,7 @@ alias: "regional-us-east-1"  # Unique Alias
 1.  Commit and push this file.
 2.  The **Central Pipeline** will trigger.
 3.  It will provision the **Regional Cluster** and the **Regional Pipeline** in the target account.
-4.  **IMPORTANT:** Once deployed, log in to the **Regional Account** console and authorize the new `regional-github-connection`.
+4.  **IMPORTANT:** Once deployed, log in to the **Regional Account** console and authorize the new GitHub connection (named `rc-gh-*` where `*` is a hash-based identifier).
 
 ### Deploy a Management Cluster
 Create a file `deploy/<region-name>/management/<cluster-name>.yaml`:

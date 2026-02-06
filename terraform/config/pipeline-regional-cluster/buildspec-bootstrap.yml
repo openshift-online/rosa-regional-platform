@@ -120,13 +120,14 @@ phases:
             export TF_STATE_REGION=$BUCKET_REGION
 
             echo "Initializing Terraform to enable output reading..."
-            cd terraform/config/regional-cluster
-            terraform init -reconfigure \
-                -backend-config="bucket=${TF_STATE_BUCKET}" \
-                -backend-config="key=${TF_STATE_KEY}" \
-                -backend-config="region=${TF_STATE_REGION}" \
-                -backend-config="use_lockfile=true"
-            cd ../../..
+            (
+                cd terraform/config/regional-cluster
+                terraform init -reconfigure \
+                    -backend-config="bucket=${TF_STATE_BUCKET}" \
+                    -backend-config="key=${TF_STATE_KEY}" \
+                    -backend-config="region=${TF_STATE_REGION}" \
+                    -backend-config="use_lockfile=true"
+            )
 
             # Export ASSUME_ROLE_ARN for bootstrap script
             # The script will assume role AFTER reading terraform outputs
@@ -137,15 +138,16 @@ phases:
             ./scripts/dev/validate-argocd-config.sh regional-cluster
 
             echo "Checking terraform outputs are available..."
-            cd terraform/config/regional-cluster
-            if ! terraform output -json > /tmp/tf-outputs.json 2>&1; then
-                echo "❌ Failed to read terraform outputs"
-                cat /tmp/tf-outputs.json
-                exit 1
-            fi
-            echo "✓ Terraform outputs available:"
-            jq 'keys' /tmp/tf-outputs.json
-            cd ../../..
+            (
+                cd terraform/config/regional-cluster
+                if ! terraform output -json > /tmp/tf-outputs.json 2>&1; then
+                    echo "❌ Failed to read terraform outputs"
+                    cat /tmp/tf-outputs.json
+                    exit 1
+                fi
+                echo "✓ Terraform outputs available:"
+                jq 'keys' /tmp/tf-outputs.json
+            )
 
             echo "Bootstrapping ArgoCD..."
             ./scripts/bootstrap-argocd.sh regional-cluster "${TARGET_ENVIRONMENT}" "${REGION}" 2>&1 | tee /tmp/bootstrap.log
