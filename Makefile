@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional provision-maestro-agent-iot-regional provision-maestro-agent-iot-management cleanup-maestro-agent-iot destroy-management destroy-regional test test-e2e
+.PHONY: help terraform-fmt terraform-upgrade provision-management provision-regional apply-infra-management apply-infra-regional provision-maestro-agent-iot-regional provision-maestro-agent-iot-management cleanup-maestro-agent-iot register-management-consumer deploy-manifest destroy-management destroy-regional test test-e2e
 
 # Default target
 help:
@@ -16,6 +16,12 @@ help:
 	@echo "  provision-maestro-agent-iot-regional   - Step 1: Provision IoT in regional account"
 	@echo "  provision-maestro-agent-iot-management - Step 2: Create secret in management account"
 	@echo "  cleanup-maestro-agent-iot              - Cleanup IoT resources before re-provisioning"
+	@echo ""
+	@echo "🔗 Consumer Registration:"
+	@echo "  register-management-consumer           - Register management cluster with regional Maestro"
+	@echo ""
+	@echo "📦 Manifest Deployment:"
+	@echo "  deploy-manifest                        - Deploy a manifest to management cluster via Maestro"
 	@echo ""
 	@echo "🛠️  Terraform Utilities:"
 	@echo "  terraform-fmt                    - Format all Terraform files"
@@ -203,6 +209,36 @@ cleanup-maestro-agent-iot:
 		exit 1; \
 	fi
 	@./scripts/cleanup-maestro-agent-iot.sh $(MGMT_TFVARS)
+
+# Register management cluster as a consumer with regional Maestro
+register-management-consumer:
+	@if [ -z "$(MGMT_TFVARS)" ]; then \
+		echo "❌ Error: MGMT_TFVARS not set"; \
+		echo ""; \
+		echo "Usage: make register-management-consumer MGMT_TFVARS=<path-to-tfvars>"; \
+		echo ""; \
+		echo "Example:"; \
+		echo "  make register-management-consumer MGMT_TFVARS=terraform/config/management-cluster/terraform.tfvars"; \
+		echo ""; \
+		echo "⚠️  Ensure you are authenticated with REGIONAL AWS account credentials!"; \
+		exit 1; \
+	fi
+	@./scripts/register-management-consumer.sh $(MGMT_TFVARS)
+
+# Deploy a manifest to management cluster via Maestro
+deploy-manifest:
+	@if [ -z "$(MANIFEST)" ] || [ -z "$(MGMT_TFVARS)" ]; then \
+		echo "❌ Error: MANIFEST and MGMT_TFVARS must be set"; \
+		echo ""; \
+		echo "Usage: make deploy-manifest MANIFEST=<manifest-file> MGMT_TFVARS=<path-to-tfvars>"; \
+		echo ""; \
+		echo "Example:"; \
+		echo "  make deploy-manifest MANIFEST=my-configmap.yaml MGMT_TFVARS=terraform/config/management-cluster/terraform.tfvars"; \
+		echo ""; \
+		echo "⚠️  Ensure you are authenticated with REGIONAL AWS account credentials!"; \
+		exit 1; \
+	fi
+	@./scripts/deploy-manifest-to-management.sh $(MANIFEST) $(MGMT_TFVARS)
 
 # =============================================================================
 # Testing Targets
