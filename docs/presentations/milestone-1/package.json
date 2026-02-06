@@ -1,0 +1,17 @@
+{
+  "name": "rosa-regional-platform-presentation",
+  "private": true,
+  "scripts": {
+    "dev": "slidev slides.md",
+    "build": "slidev build slides.md",
+    "export": "slidev export slides.md",
+    "export-pptx": "slidev export slides.md --format pptx"
+  },
+  "dependencies": {
+    "@slidev/cli": "^0.50.0",
+    "@slidev/theme-default": "latest"
+  },
+  "devDependencies": {
+    "playwright-chromium": "^1.58.1"
+  }
+}
