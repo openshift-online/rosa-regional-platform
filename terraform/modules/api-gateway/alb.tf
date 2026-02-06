@@ -36,7 +36,7 @@ resource "aws_lb" "frontend" {
 # -----------------------------------------------------------------------------
 
 resource "aws_lb_target_group" "frontend" {
-  name        = "${var.resource_name_base}-api"
+  name_prefix = substr("${var.resource_name_base}-api-", 0, 6)
   port        = var.target_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -57,6 +57,10 @@ resource "aws_lb_target_group" "frontend" {
   tags = {
     Name                   = "${var.resource_name_base}-api"
     "eks:eks-cluster-name" = var.cluster_name
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 

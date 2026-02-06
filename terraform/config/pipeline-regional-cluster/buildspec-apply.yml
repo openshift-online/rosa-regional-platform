@@ -1,0 +1,185 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - yum install -y unzip python3 jq gnupg2
+      - pip3 install boto3 pyyaml
+      - echo "Installing Terraform..."
+      - |
+        set -euo pipefail
+        TF_VERSION="1.14.3"
+        TF_PACKAGE="terraform_${TF_VERSION}_linux_amd64.zip"
+        TF_BASE_URL="https://releases.hashicorp.com/terraform/${TF_VERSION}"
+
+        # Download Terraform package and verification files
+        echo "Downloading Terraform ${TF_VERSION}..."
+        curl -sSfO "${TF_BASE_URL}/${TF_PACKAGE}"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        # Import HashiCorp GPG key
+        echo "Importing HashiCorp GPG key..."
+        gpg --batch --keyserver keyserver.ubuntu.com --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver keys.openpgp.org --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver pgp.mit.edu --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F
+
+        # Verify GPG signature on SHA256SUMS
+        echo "Verifying GPG signature..."
+        if ! gpg --batch --verify "terraform_${TF_VERSION}_SHA256SUMS.sig" "terraform_${TF_VERSION}_SHA256SUMS"; then
+          echo "❌ GPG signature verification failed"
+          exit 1
+        fi
+        echo "✓ GPG signature verified"
+
+        # Verify checksum of Terraform package
+        echo "Verifying SHA256 checksum..."
+        if ! grep "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" | sha256sum -c -; then
+          echo "❌ Checksum verification failed"
+          exit 1
+        fi
+        echo "✓ Checksum verified"
+
+        # Install Terraform
+        echo "Installing Terraform..."
+        unzip -o "${TF_PACKAGE}" -d /tmp/tf-bin
+        mv /tmp/tf-bin/terraform /usr/local/bin/
+
+        # Cleanup
+        rm -f "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" "terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        terraform version
+        echo "✓ Terraform installation verified"
+
+  build:
+    commands:
+      - echo "Provisioning Regional Cluster Infrastructure..."
+      - |
+        # Validate required environment variables
+        if [[ -z "$TARGET_ACCOUNT_ID" || -z "$TARGET_REGION" || -z "$TARGET_ALIAS" ]]; then
+            echo "❌ ERROR: Required environment variables not set"
+            echo "   TARGET_ACCOUNT_ID: ${TARGET_ACCOUNT_ID}"
+            echo "   TARGET_REGION: ${TARGET_REGION}"
+            echo "   TARGET_ALIAS: ${TARGET_ALIAS}"
+            exit 1
+        fi
+
+        # Set Terraform backend configuration variables (stored in CENTRAL account)
+        CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        export TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
+        export TF_STATE_KEY="regional-cluster/${TARGET_ALIAS}.tfstate"
+
+        # Dynamically detect bucket region
+        BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
+        if [ "$BUCKET_REGION" == "None" ] || [ "$BUCKET_REGION" == "null" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
+        export TF_STATE_REGION=$BUCKET_REGION
+
+        echo "Using Terraform state (stored in central account):"
+        echo "  Bucket: $TF_STATE_BUCKET"
+        echo "  Key: $TF_STATE_KEY"
+        echo "  Region: $TF_STATE_REGION"
+
+        # Regional cluster is deployed to TARGET_ACCOUNT_ID (regional account)
+        echo "Deploying regional cluster to account: ${TARGET_ACCOUNT_ID}"
+        echo "  Region: ${TARGET_REGION}"
+        echo "  Alias: ${TARGET_ALIAS}"
+
+        # Generate override.tf for cross-account role assumption
+        ROLE_ARN="arn:aws:iam::${TARGET_ACCOUNT_ID}:role/OrganizationAccountAccessRole"
+        echo "Generating override.tf for cross-account access to ${TARGET_ACCOUNT_ID}..."
+        echo "provider \"aws\" {" > terraform/config/regional-cluster/override.tf
+        echo "  region = \"${TARGET_REGION}\"" >> terraform/config/regional-cluster/override.tf
+        echo "  assume_role {" >> terraform/config/regional-cluster/override.tf
+        echo "    role_arn = \"${ROLE_ARN}\"" >> terraform/config/regional-cluster/override.tf
+        echo "  }" >> terraform/config/regional-cluster/override.tf
+        echo "}" >> terraform/config/regional-cluster/override.tf
+
+        # Get temporary credentials for regional account to cleanup secrets
+        echo "Cleaning up any pending secrets in regional account..."
+        echo "Assuming role: ${ROLE_ARN}"
+        if ! CREDS=$(aws sts assume-role --role-arn "${ROLE_ARN}" --role-session-name "cleanup-secrets" --output json 2>&1); then
+            echo "❌ Failed to assume role: ${ROLE_ARN}"
+            echo "AWS CLI error output:"
+            echo "$CREDS"
+            exit 1
+        fi
+
+        # Validate credentials were returned
+        if ! echo "$CREDS" | jq -e '.Credentials' >/dev/null 2>&1; then
+            echo "❌ Role assumption succeeded but credentials not found in response"
+            echo "Role ARN: ${ROLE_ARN}"
+            echo "Response:"
+            echo "$CREDS"
+            exit 1
+        fi
+
+        REGIONAL_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.AccessKeyId')
+        REGIONAL_SECRET_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
+        REGIONAL_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
+
+        # Final validation that credentials are not null/empty
+        if [[ -z "$REGIONAL_ACCESS_KEY" || "$REGIONAL_ACCESS_KEY" == "null" ]]; then
+            echo "❌ Failed to extract valid credentials from assume-role response"
+            exit 1
+        fi
+
+        echo "✓ Successfully assumed role and extracted credentials"
+
+        # Force delete any secrets that are scheduled for deletion
+        for SECRET_NAME in "maestro/server-cert" "maestro/server-config" "maestro/db-credentials"; do
+            if AWS_ACCESS_KEY_ID=$REGIONAL_ACCESS_KEY \
+               AWS_SECRET_ACCESS_KEY=$REGIONAL_SECRET_KEY \
+               AWS_SESSION_TOKEN=$REGIONAL_SESSION_TOKEN \
+               aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region "${TARGET_REGION}" 2>/dev/null | \
+               jq -e '.DeletedDate != null' >/dev/null 2>&1; then
+                echo "Force deleting pending secret: $SECRET_NAME"
+                AWS_ACCESS_KEY_ID=$REGIONAL_ACCESS_KEY \
+                AWS_SECRET_ACCESS_KEY=$REGIONAL_SECRET_KEY \
+                AWS_SESSION_TOKEN=$REGIONAL_SESSION_TOKEN \
+                aws secretsmanager delete-secret \
+                    --secret-id "$SECRET_NAME" \
+                    --force-delete-without-recovery \
+                    --region "${TARGET_REGION}" || echo "Could not delete $SECRET_NAME (may not exist)"
+            fi
+        done
+        echo "Secret cleanup complete"
+
+        # Set Terraform variables for regional cluster
+        export TF_VAR_app_code="${APP_CODE}"
+        export TF_VAR_service_phase="${SERVICE_PHASE}"
+        export TF_VAR_cost_center="${COST_CENTER}"
+        export TF_VAR_repository_url="${CODEBUILD_SOURCE_REPO_URL:-https://github.com/placeholder/repo.git}"
+        export TF_VAR_repository_branch="${CODEBUILD_SOURCE_VERSION:-main}"
+        export TF_VAR_api_additional_allowed_accounts="${TARGET_ACCOUNT_ID}"
+
+        echo "Terraform variables:"
+        echo "  App Code: $TF_VAR_app_code"
+        echo "  Service Phase: $TF_VAR_service_phase"
+        echo "  Cost Center: $TF_VAR_cost_center"
+        echo "  Repository URL: $TF_VAR_repository_url"
+        echo "  Repository Branch: $TF_VAR_repository_branch"
+        echo "  API Additional Allowed Accounts: $TF_VAR_api_additional_allowed_accounts (regional account)"
+      - make pipeline-provision-regional-infra
+      - echo "Regional cluster infrastructure provisioned successfully."
+      - rm -f terraform/config/regional-cluster/override.tf
+
+  post_build:
+    commands:
+      - echo "Infrastructure deployment complete."
+      - |
+        if [ -f terraform/config/regional-cluster/outputs.json ]; then
+          echo "=== Terraform Outputs ==="
+          cat terraform/config/regional-cluster/outputs.json
+        fi
+
+artifacts:
+  files:
+    - '**/*'
+    - terraform/config/regional-cluster/outputs.json

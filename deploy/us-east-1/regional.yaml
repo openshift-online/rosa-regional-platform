@@ -1,0 +1,9 @@
+account_id: "018092638725"   # The AWS Account ID of the Regional Account -- SANDBOX05
+region: "us-east-1"          # The region to deploy the Regional Cluster and Pipeline into
+alias: "regional-us-east-1"  # Unique alias for this regional environment
+
+# Terraform variables for infrastructure tagging
+terraform_vars:
+  app_code: "infra"
+  service_phase: "dev"
+  cost_center: "000"

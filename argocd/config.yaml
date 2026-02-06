@@ -14,6 +14,11 @@
 shards:
   - region: "eu-west-1"
     environment: "integration"
+    # Infrastructure metadata for Terraform
+    terraform_vars:
+      app_code: "infra"
+      service_phase: "dev"
+      cost_center: "000"
     values:
       management-cluster:
         hypershift:
@@ -24,6 +29,11 @@ shards:
             domain: "dev.eu-west-1.rosa.example.com"
   - region: "us-east-1"
     environment: "integration"
+    # Infrastructure metadata for Terraform
+    terraform_vars:
+      app_code: "infra"
+      service_phase: "dev"
+      cost_center: "000"
     values:
       management-cluster:
         hypershift:
@@ -34,6 +44,11 @@ shards:
             domain: "dev.us-east-1.rosa.example.com"
   - region: "us-east-2"
     environment: "integration"
+    # Infrastructure metadata for Terraform
+    terraform_vars:
+      app_code: "infra"
+      service_phase: "dev"
+      cost_center: "000"
     values:
       regional-cluster:
         maestro:
@@ -49,6 +64,11 @@ shards:
 
   - region: "eu-west-1"
     environment: "staging"
+    # Infrastructure metadata for Terraform
+    terraform_vars:
+      app_code: "infra"
+      service_phase: "staging"
+      cost_center: "000"
     config_revision:
       management-cluster: "826fa76d08fc2ce87c863196e52d5a4fa9259a82"
       regional-cluster: "826fa76d08fc2ce87c863196e52d5a4fa9259a82"

@@ -8,6 +8,8 @@
 *.zip
 bastion_task*.json
 .venv
+tfplan
+**/tfplan
 
 # Helm
 charts/

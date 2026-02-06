@@ -1,0 +1,251 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - yum install -y unzip python3 jq gnupg2
+      - pip3 install boto3 pyyaml
+      - echo "Installing Terraform..."
+      - |
+        set -euo pipefail
+        TF_VERSION="1.14.3"
+        TF_PACKAGE="terraform_${TF_VERSION}_linux_amd64.zip"
+        TF_BASE_URL="https://releases.hashicorp.com/terraform/${TF_VERSION}"
+
+        # Download Terraform package and verification files
+        echo "Downloading Terraform ${TF_VERSION}..."
+        curl -sSfO "${TF_BASE_URL}/${TF_PACKAGE}"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        # Import HashiCorp GPG key
+        echo "Importing HashiCorp GPG key..."
+        gpg --batch --keyserver keyserver.ubuntu.com --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver keys.openpgp.org --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver pgp.mit.edu --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F
+
+        # Verify GPG signature on SHA256SUMS
+        echo "Verifying GPG signature..."
+        if ! gpg --batch --verify "terraform_${TF_VERSION}_SHA256SUMS.sig" "terraform_${TF_VERSION}_SHA256SUMS"; then
+          echo "❌ GPG signature verification failed"
+          exit 1
+        fi
+        echo "✓ GPG signature verified"
+
+        # Verify checksum of Terraform package
+        echo "Verifying SHA256 checksum..."
+        if ! grep "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" | sha256sum -c -; then
+          echo "❌ Checksum verification failed"
+          exit 1
+        fi
+        echo "✓ Checksum verified"
+
+        # Install Terraform
+        echo "Installing Terraform..."
+        unzip -o "${TF_PACKAGE}" -d /tmp/tf-bin
+        mv /tmp/tf-bin/terraform /usr/local/bin/
+
+        # Cleanup
+        rm -f "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" "terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        terraform version
+        echo "✓ Terraform installation verified"
+
+  build:
+    commands:
+      - echo "Provisioning Pipelines from deploy/ directory structure..."
+      - |
+        set -euo pipefail
+        # Get central account ID for state bucket
+        CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
+        TF_STATE_REGION="us-east-1"
+
+        echo "Using state bucket: $TF_STATE_BUCKET"
+        echo "Using lockfile-based state locking"
+
+        # Helper function: Retry terraform apply with exponential backoff
+        retry_terraform_apply() {
+            local state_key="$1"
+            local max_attempts=3
+            local attempt=1
+            local wait_time=30
+
+            while [ $attempt -le $max_attempts ]; do
+                echo "📝 Attempt $attempt/$max_attempts: Running terraform apply..."
+
+                if terraform apply -auto-approve $TF_VARS; then
+                    echo "✅ Terraform apply succeeded"
+                    return 0
+                else
+                    if [ $attempt -lt $max_attempts ]; then
+                        echo "⚠️  Attempt $attempt failed, waiting ${wait_time}s before retry..."
+                        sleep $wait_time
+                        wait_time=$((wait_time * 2))  # Exponential backoff
+                        attempt=$((attempt + 1))
+                    else
+                        echo "❌ All $max_attempts attempts failed"
+                        return 1
+                    fi
+                fi
+            done
+        }
+
+        # Process each region directory in deploy/
+        for region_dir in deploy/*/; do
+            [ -d "$region_dir" ] || continue
+
+            # Extract region name from directory path (e.g., deploy/fedramp-us-east-1/ -> fedramp-us-east-1)
+            REGION_NAME=$(basename "$region_dir")
+
+            echo "=========================================="
+            echo "Processing region: $REGION_NAME"
+            echo "=========================================="
+
+            # 1. Check for regional.yaml in this region
+            if [ -f "${region_dir}regional.yaml" ]; then
+                echo "Found regional.yaml for $REGION_NAME"
+
+                REGIONAL_CONFIG="${region_dir}regional.yaml"
+
+                # Extract configuration from YAML
+                TARGET_REGION=$(python3 -c "import yaml; config = yaml.safe_load(open('$REGIONAL_CONFIG')); print(config.get('region', config.get('target_region', 'us-east-1')))")
+                TARGET_ACCOUNT_ID=$(python3 -c "import yaml; config = yaml.safe_load(open('$REGIONAL_CONFIG')); print(config.get('account_id', ''))")
+                TARGET_ALIAS=$(python3 -c "import yaml; config = yaml.safe_load(open('$REGIONAL_CONFIG')); print(config.get('alias', ''))")
+
+                # Extract terraform vars with defaults
+                APP_CODE=$(python3 -c "import yaml; config = yaml.safe_load(open('$REGIONAL_CONFIG')); print(config.get('terraform_vars', {}).get('app_code', 'infra'))")
+                SERVICE_PHASE=$(python3 -c "import yaml; config = yaml.safe_load(open('$REGIONAL_CONFIG')); print(config.get('terraform_vars', {}).get('service_phase', 'dev'))")
+                COST_CENTER=$(python3 -c "import yaml; config = yaml.safe_load(open('$REGIONAL_CONFIG')); print(config.get('terraform_vars', {}).get('cost_center', '000'))")
+
+                echo "  Target Region: $TARGET_REGION"
+                [ -n "$TARGET_ACCOUNT_ID" ] && echo "  Target Account ID: $TARGET_ACCOUNT_ID"
+                [ -n "$TARGET_ALIAS" ] && echo "  Target Alias: $TARGET_ALIAS"
+                echo "  Terraform Vars: app_code=$APP_CODE, service_phase=$SERVICE_PHASE, cost_center=$COST_CENTER"
+
+                echo "Provisioning Regional Cluster Pipeline for $REGION_NAME..."
+
+                cd terraform/config/pipeline-regional-cluster
+
+                terraform init \
+                    -reconfigure \
+                    -backend-config="bucket=$TF_STATE_BUCKET" \
+                    -backend-config="key=pipelines/regional-${REGION_NAME}.tfstate" \
+                    -backend-config="region=$TF_STATE_REGION" \
+                    -backend-config="use_lockfile=true"
+
+                # Build terraform apply command with variables
+                TF_VARS="-var=github_repo_owner=${GITHUB_REPO_OWNER} -var=github_repo_name=${GITHUB_REPO_NAME} -var=github_branch=${GITHUB_BRANCH} -var=region=${TARGET_REGION}"
+                [ -n "$TARGET_ACCOUNT_ID" ] && TF_VARS="$TF_VARS -var=target_account_id=${TARGET_ACCOUNT_ID}"
+                [ -n "$TARGET_REGION" ] && TF_VARS="$TF_VARS -var=target_region=${TARGET_REGION}"
+                [ -n "$TARGET_ALIAS" ] && TF_VARS="$TF_VARS -var=target_alias=${TARGET_ALIAS}"
+                [ -n "$APP_CODE" ] && TF_VARS="$TF_VARS -var=app_code=${APP_CODE}"
+                [ -n "$SERVICE_PHASE" ] && TF_VARS="$TF_VARS -var=service_phase=${SERVICE_PHASE}"
+                [ -n "$COST_CENTER" ] && TF_VARS="$TF_VARS -var=cost_center=${COST_CENTER}"
+
+                # Apply with retry logic
+                if retry_terraform_apply "pipelines/regional-${REGION_NAME}.tfstate"; then
+                    cd ../../..
+                    echo "✅ Regional pipeline created for $REGION_NAME"
+                else
+                    cd ../../..
+                    echo "❌ Failed to create regional pipeline for $REGION_NAME after retries"
+                    echo "⏭️  Continuing with next region..."
+                    continue
+                fi
+            else
+                echo "No regional.yaml found in $region_dir, skipping regional pipeline..."
+            fi
+
+            # 2. Check for management/*.yaml files in this region
+            if [ -d "${region_dir}management" ]; then
+                echo "Checking for management cluster configs in $REGION_NAME..."
+
+                for mc_config in ${region_dir}management/*.yaml; do
+                    [ -e "$mc_config" ] || continue
+
+                    # Extract cluster name from filename (e.g., mc01-us-east-1.yaml -> mc01-us-east-1)
+                    CLUSTER_NAME=$(basename "$mc_config" .yaml)
+
+                    echo "Found management cluster config: $CLUSTER_NAME"
+
+                    # Extract configuration from YAML
+                    TARGET_REGION=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('region', config.get('target_region', 'us-east-1')))")
+                    TARGET_ACCOUNT_ID=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('account_id', ''))")
+                    TARGET_ALIAS=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('alias', ''))")
+
+                    # Extract terraform vars with defaults
+                    APP_CODE=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('terraform_vars', {}).get('app_code', 'infra'))")
+                    SERVICE_PHASE=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('terraform_vars', {}).get('service_phase', 'dev'))")
+                    COST_CENTER=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('terraform_vars', {}).get('cost_center', '000'))")
+                    CLUSTER_ID=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('terraform_vars', {}).get('cluster_id', ''))")
+                    REGIONAL_AWS_ACCOUNT_ID=$(python3 -c "import yaml; config = yaml.safe_load(open('$mc_config')); print(config.get('terraform_vars', {}).get('regional_aws_account_id', ''))")
+
+                    # Use TARGET_ALIAS as cluster_id default if not specified
+                    [ -z "$CLUSTER_ID" ] && CLUSTER_ID="${TARGET_ALIAS}"
+                    # Use CENTRAL_ACCOUNT_ID as regional account default if not specified
+                    [ -z "$REGIONAL_AWS_ACCOUNT_ID" ] && REGIONAL_AWS_ACCOUNT_ID="${CENTRAL_ACCOUNT_ID}"
+
+                    echo "  Target Region: $TARGET_REGION"
+                    [ -n "$TARGET_ACCOUNT_ID" ] && echo "  Target Account ID: $TARGET_ACCOUNT_ID"
+                    [ -n "$TARGET_ALIAS" ] && echo "  Target Alias: $TARGET_ALIAS"
+                    echo "  Terraform Vars: app_code=$APP_CODE, service_phase=$SERVICE_PHASE, cost_center=$COST_CENTER, cluster_id=$CLUSTER_ID, regional_aws_account_id=$REGIONAL_AWS_ACCOUNT_ID"
+
+                    echo "Provisioning Management Cluster Pipeline for $CLUSTER_NAME in $REGION_NAME..."
+
+                    cd terraform/config/pipeline-management-cluster
+
+                    terraform init \
+                        -reconfigure \
+                        -backend-config="bucket=$TF_STATE_BUCKET" \
+                        -backend-config="key=pipelines/management-${REGION_NAME}-${CLUSTER_NAME}.tfstate" \
+                        -backend-config="region=$TF_STATE_REGION" \
+                        -backend-config="use_lockfile=true"
+
+                    # Build terraform apply command with variables
+                    TF_VARS="-var=github_repo_owner=${GITHUB_REPO_OWNER} -var=github_repo_name=${GITHUB_REPO_NAME} -var=github_branch=${GITHUB_BRANCH} -var=region=${TARGET_REGION}"
+                    [ -n "$TARGET_ACCOUNT_ID" ] && TF_VARS="$TF_VARS -var=target_account_id=${TARGET_ACCOUNT_ID}"
+                    [ -n "$TARGET_REGION" ] && TF_VARS="$TF_VARS -var=target_region=${TARGET_REGION}"
+                    [ -n "$TARGET_ALIAS" ] && TF_VARS="$TF_VARS -var=target_alias=${TARGET_ALIAS}"
+                    [ -n "$APP_CODE" ] && TF_VARS="$TF_VARS -var=app_code=${APP_CODE}"
+                    [ -n "$SERVICE_PHASE" ] && TF_VARS="$TF_VARS -var=service_phase=${SERVICE_PHASE}"
+                    [ -n "$COST_CENTER" ] && TF_VARS="$TF_VARS -var=cost_center=${COST_CENTER}"
+                    [ -n "$CLUSTER_ID" ] && TF_VARS="$TF_VARS -var=cluster_id=${CLUSTER_ID}"
+                    [ -n "$REGIONAL_AWS_ACCOUNT_ID" ] && TF_VARS="$TF_VARS -var=regional_aws_account_id=${REGIONAL_AWS_ACCOUNT_ID}"
+                    # Repository URL and branch for cluster configuration
+                    TF_VARS="$TF_VARS -var=repository_url=https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}.git"
+                    TF_VARS="$TF_VARS -var=repository_branch=${GITHUB_BRANCH}"
+
+                    # Apply with retry logic
+                    if retry_terraform_apply "pipelines/management-${REGION_NAME}-${CLUSTER_NAME}.tfstate"; then
+                        cd ../../..
+                        echo "✅ Management pipeline created for $CLUSTER_NAME in $REGION_NAME"
+                    else
+                        cd ../../..
+                        echo "❌ Failed to create management pipeline for $CLUSTER_NAME after retries"
+                        echo "⏭️  Continuing with next management cluster..."
+                        continue
+                    fi
+                done
+            else
+                echo "No management/ directory in $region_dir, skipping management pipelines..."
+            fi
+
+            echo ""
+        done
+
+  post_build:
+    commands:
+      - echo "Pipeline provisioning complete."
+      - echo "Check AWS Console CodePipeline to see created pipelines."
+
+artifacts:
+  files:
+    - '**/*'

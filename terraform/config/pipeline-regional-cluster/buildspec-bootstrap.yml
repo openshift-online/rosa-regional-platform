@@ -1,0 +1,194 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - echo "Installing dependencies..."
+      - yum install -y unzip python3 jq gnupg2
+      - pip3 install boto3 pyyaml
+      - echo "Installing kubectl..."
+      - |
+        set -euo pipefail
+        KUBECTL_VERSION="v1.31.0"
+
+        # Download kubectl binary and checksum
+        echo "Downloading kubectl ${KUBECTL_VERSION}..."
+        curl -sSfLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+        curl -sSfLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+
+        # Verify checksum
+        echo "Verifying kubectl checksum..."
+        if ! echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c -; then
+          echo "❌ kubectl checksum verification failed"
+          exit 1
+        fi
+        echo "✓ kubectl checksum verified"
+
+        # Install kubectl
+        chmod +x kubectl
+        mv kubectl /usr/local/bin/
+        rm -f kubectl.sha256
+
+        kubectl version --client
+        echo "✓ kubectl installation verified"
+      - chmod +x scripts/dev/validate-argocd-config.sh scripts/bootstrap-argocd.sh
+      - echo "Installing Terraform (needed to read outputs)..."
+      - |
+        set -euo pipefail
+        TF_VERSION="1.14.3"
+        TF_PACKAGE="terraform_${TF_VERSION}_linux_amd64.zip"
+        TF_BASE_URL="https://releases.hashicorp.com/terraform/${TF_VERSION}"
+
+        # Download Terraform package and verification files
+        echo "Downloading Terraform ${TF_VERSION}..."
+        curl -sSfO "${TF_BASE_URL}/${TF_PACKAGE}"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS"
+        curl -sSfO "${TF_BASE_URL}/terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        # Import HashiCorp GPG key
+        echo "Importing HashiCorp GPG key..."
+        gpg --batch --keyserver keyserver.ubuntu.com --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver keys.openpgp.org --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F || \
+        gpg --batch --keyserver pgp.mit.edu --recv-keys \
+          C874011F0AB405110D02105534365D9472D7468F
+
+        # Verify GPG signature on SHA256SUMS
+        echo "Verifying GPG signature..."
+        if ! gpg --batch --verify "terraform_${TF_VERSION}_SHA256SUMS.sig" "terraform_${TF_VERSION}_SHA256SUMS"; then
+          echo "❌ GPG signature verification failed"
+          exit 1
+        fi
+        echo "✓ GPG signature verified"
+
+        # Verify checksum of Terraform package
+        echo "Verifying SHA256 checksum..."
+        if ! grep "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" | sha256sum -c -; then
+          echo "❌ Checksum verification failed"
+          exit 1
+        fi
+        echo "✓ Checksum verified"
+
+        # Install Terraform
+        echo "Installing Terraform..."
+        unzip -o "${TF_PACKAGE}" -d /tmp/tf-bin
+        mv /tmp/tf-bin/terraform /usr/local/bin/
+
+        # Cleanup
+        rm -f "${TF_PACKAGE}" "terraform_${TF_VERSION}_SHA256SUMS" "terraform_${TF_VERSION}_SHA256SUMS.sig"
+
+        terraform version
+        echo "✓ Terraform installation verified"
+
+  build:
+    commands:
+      - echo "Bootstrapping ArgoCD on Regional Cluster..."
+      - |
+        bootstrap_target() {
+            local ACCOUNT_ID=$1
+            local REGION=$2
+            local ALIAS=$3
+
+            echo "---------------------------------------------------"
+            echo "Bootstrapping ArgoCD: $ALIAS ($ACCOUNT_ID) in $REGION"
+
+            # Get central account ID
+            CENTRAL_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            echo "Central Account: ${CENTRAL_ACCOUNT_ID}"
+
+            local ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/OrganizationAccountAccessRole"
+
+            # Create override.tf with ONLY region (no assume_role)
+            # This allows terraform to read state from S3 using central account credentials
+            # The bootstrap script will assume role separately for ECS/EKS access
+            echo "Creating override.tf for state access..."
+            echo 'provider "aws" {' > terraform/config/regional-cluster/override.tf
+            echo "  region = \"${REGION}\"" >> terraform/config/regional-cluster/override.tf
+            echo '}' >> terraform/config/regional-cluster/override.tf
+
+            # Initialize Terraform with backend config
+            export TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
+            export TF_STATE_KEY="regional-cluster/${ALIAS}.tfstate"
+
+            # Dynamically detect bucket region (uses central account creds)
+            BUCKET_REGION=$(aws s3api get-bucket-location --bucket $TF_STATE_BUCKET --query LocationConstraint --output text)
+            if [ "$BUCKET_REGION" == "None" ] || [ "$BUCKET_REGION" == "null" ] || [ -z "$BUCKET_REGION" ]; then BUCKET_REGION="us-east-1"; fi
+            export TF_STATE_REGION=$BUCKET_REGION
+
+            echo "Initializing Terraform to enable output reading..."
+            (
+                cd terraform/config/regional-cluster
+                terraform init -reconfigure \
+                    -backend-config="bucket=${TF_STATE_BUCKET}" \
+                    -backend-config="key=${TF_STATE_KEY}" \
+                    -backend-config="region=${TF_STATE_REGION}" \
+                    -backend-config="use_lockfile=true"
+            )
+
+            # Export ASSUME_ROLE_ARN for bootstrap script
+            # The script will assume role AFTER reading terraform outputs
+            # (outputs must be read with central account creds since state is in central account)
+            export ASSUME_ROLE_ARN="${ROLE_ARN}"
+
+            echo "Validating ArgoCD configuration..."
+            ./scripts/dev/validate-argocd-config.sh regional-cluster
+
+            echo "Checking terraform outputs are available..."
+            (
+                cd terraform/config/regional-cluster
+                if ! terraform output -json > /tmp/tf-outputs.json 2>&1; then
+                    echo "❌ Failed to read terraform outputs"
+                    cat /tmp/tf-outputs.json
+                    exit 1
+                fi
+                echo "✓ Terraform outputs available:"
+                jq 'keys' /tmp/tf-outputs.json
+            )
+
+            echo "Bootstrapping ArgoCD..."
+            ./scripts/bootstrap-argocd.sh regional-cluster "${TARGET_ENVIRONMENT}" "${REGION}" 2>&1 | tee /tmp/bootstrap.log
+            BOOTSTRAP_EXIT_CODE=${PIPESTATUS[0]}
+
+            echo ""
+            echo "=== Bootstrap Script Log ==="
+            cat /tmp/bootstrap.log
+            echo "=== End Bootstrap Log ==="
+            echo ""
+
+            if [ $BOOTSTRAP_EXIT_CODE -ne 0 ]; then
+                echo "❌ Bootstrap script failed with exit code $BOOTSTRAP_EXIT_CODE"
+                exit 1
+            fi
+
+            echo "Verifying ArgoCD deployment..."
+            # The bootstrap script handles kubeconfig setup with role assumption
+            kubectl get pods -n argocd || echo "ArgoCD pods not yet ready"
+
+            # Cleanup
+            echo "Cleaning up..."
+            rm -f terraform/config/regional-cluster/override.tf
+
+            unset ASSUME_ROLE_ARN
+        }
+
+        # This buildspec is called by the pipeline with TARGET_* environment variables
+        if [[ -n "$TARGET_ACCOUNT_ID" && -n "$TARGET_REGION" && -n "$TARGET_ALIAS" ]]; then
+            echo "Using pipeline configuration (TARGET_* variables)"
+            bootstrap_target "$TARGET_ACCOUNT_ID" "$TARGET_REGION" "$TARGET_ALIAS"
+        else
+            echo "ERROR: TARGET_* variables not set. This pipeline should be created by the provisioner."
+            exit 1
+        fi
+
+  post_build:
+    commands:
+      - echo "ArgoCD bootstrap complete."
+      - echo "Regional cluster is now fully provisioned and ready for use."
+
+artifacts:
+  files:
+    - '**/*'

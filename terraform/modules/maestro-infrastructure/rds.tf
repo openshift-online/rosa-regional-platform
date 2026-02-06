@@ -34,6 +34,9 @@ resource "aws_security_group" "maestro_db" {
   description = "Security group for Maestro PostgreSQL database"
   vpc_id      = var.vpc_id
 
+  # Prevent Terraform from trying to detach RDS-managed ENIs
+  revoke_rules_on_delete = false
+
   # Allow from EKS cluster additional security group
   ingress {
     description     = "PostgreSQL from EKS cluster additional security group"
@@ -140,7 +143,10 @@ resource "aws_db_instance" "maestro" {
   )
 
   # Prevent replacement due to timestamp in final_snapshot_identifier
+  # Also ensure RDS instance is deleted before security group cleanup
   lifecycle {
     ignore_changes = [final_snapshot_identifier]
   }
+
+  depends_on = [aws_security_group.maestro_db]
 }

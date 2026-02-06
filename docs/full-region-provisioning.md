@@ -225,13 +225,34 @@ Expected: ArgoCD applications "Synced" and "Healthy".
 
 Register the Management Cluster as a consumer with the Regional Cluster's Maestro server.
 
+### Connect to Regional Cluster
+
 ```bash
-awscurl -X POST https://$API_GATEWAY_URL/prod/api/v0/management_clusters \
---service execute-api \
---region $REGION \
--H "Content-Type: application/json" \
--d '{"name": "management-01", "labels": {"cluster_type": "management", "cluster_id": "management-01"}}'
+./scripts/dev/bastion-connect.sh regional
 ```
+
+### Register Management Cluster
+
+```bash
+# Set MC cluster name (use your actual management cluster ID)
+MC_CLUSTER_NAME="management-01"
+
+# Create consumer registration
+kubectl port-forward -n maestro-server svc/maestro-http 8080:8080 --address 0.0.0.0 & \
+PF_PID=$!; \
+sleep 5; \
+curl -X POST http://localhost:8080/api/maestro/v1/consumers \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"${MC_CLUSTER_NAME}\",
+    \"labels\": {
+      \"cluster_type\": \"${MC_CLUSTER_NAME}\",
+      \"cluster_id\": \"${MC_CLUSTER_NAME}\"
+    }
+  }"; \
+kill $PF_PID
+```
+
 
 ---
 
@@ -242,14 +263,16 @@ This section provides comprehensive validation that both Regional and Management
 <details>
 <summary>🔍 Consumer Registration Verification</summary>
 
-
 ```bash
 # Verify the Management Cluster is properly registered
-# Access the Frontend API, and query the registered consumers.
-# You can get the gateway api from the regional cluster terraform output
-✗ awscurl --service execute-api --region $REGION https://$API_GATEWAY_URL/prod/api/v0/management_clusters
+./scripts/dev/bastion-connect.sh regional
 
-awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.us-east-2.amazonaws.com/prod/api/v0/management_clusters | jq -r '.items[] | "- \(.name) (labels: \(.labels))"'
+kubectl port-forward -n maestro-server svc/maestro-http 8080:8080 --address 0.0.0.0 & \
+PF_PID=$!; \
+sleep 5; \
+echo "Registered consumers:"; \
+curl -s http://localhost:8080/api/maestro/v1/consumers | jq -r '.items[] | "- \(.name) (labels: \(.labels))"'; \
+kill $PF_PID
 ```
 
 **Expected Results:**
@@ -264,12 +287,39 @@ awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.
 
 This comprehensive test validates end-to-end Maestro payload distribution from Regional to Management Cluster via AWS IoT Core MQTT using the proper gRPC client interface:
 
-**Step 1: Create Test ManifestWork File**
+**Step 1: Setup Test Environment in Bastion**
+
+```bash
+# Connect to Regional Cluster bastion
+./scripts/dev/bastion-connect.sh regional
+
+# Install Go in the bastion to run the maestro-cli
+echo "Installing Go in bastion..."
+curl -L https://go.dev/dl/go1.21.6.linux-amd64.tar.gz | tar -xzf - -C /tmp
+export PATH=/tmp/go/bin:$PATH
+export GOPATH=/tmp/gopath
+export GOCACHE=/tmp/gocache
+
+# Clone Maestro repository in bastion
+git clone https://github.com/openshift-online/maestro.git /tmp/maestro
+cd /tmp/maestro
+
+# Replace with your actual MC cluster name
+MC_CLUSTER_NAME="management-01"
+
+# Set up port forwarding for gRPC and HTTP
+kubectl port-forward -n maestro-server svc/maestro-grpc 8090:8090 --address 0.0.0.0 &
+kubectl port-forward -n maestro-server svc/maestro-http 8080:8080 --address 0.0.0.0 &
+sleep 5
+
+echo "Go installed and port forwarding established in bastion"
+```
+
+**Step 2: Create Test ManifestWork File**
 
 ```bash
 # Create a test ManifestWork JSON file
 TIMESTAMP=$(date +%s)
-
 cat > /tmp/maestro-test-manifestwork.json << EOF
 {
   "apiVersion": "work.open-cluster-management.io/v1",
@@ -294,7 +344,7 @@ cat > /tmp/maestro-test-manifestwork.json << EOF
           "data": {
             "message": "Hello from Regional Cluster via Maestro MQTT",
             "cluster_source": "regional-cluster",
-            "cluster_destination": "${MANAGEMENT_CLUSTER}",
+            "cluster_destination": "${MC_CLUSTER_NAME}",
             "transport": "aws-iot-core-mqtt",
             "test_id": "${TIMESTAMP}",
             "payload_size": "This tests MQTT payload distribution through AWS IoT Core"
@@ -334,35 +384,56 @@ cat > /tmp/maestro-test-manifestwork.json << EOF
 EOF
 
 echo "Created ManifestWork file: maestro-payload-test-${TIMESTAMP}"
-
-cat > payload.json << EOF
-{
-  "cluster_id": "management-01",
-  "data": $(cat /tmp/maestro-test-manifestwork.json )
-}
-EOF
 ```
 
-**Step 2: Post the payload**
+**Step 3: Apply ManifestWork via Maestro Client (in bastion)**
 
 ```bash
-awscurl -X POST https://$API_GATEWAY_URL/prod/api/v0/work --service execute-api --region $REGION -d @payload.json
+# Still in Regional Cluster bastion - apply the ManifestWork using Maestro client
+echo "Applying ManifestWork via Maestro gRPC client from bastion..."
+cd /tmp/maestro
+
+go run examples/manifestwork/client.go apply /tmp/maestro-test-manifestwork.json \
+  --consumer-name=${MC_CLUSTER_NAME} \
+  --maestro-server=http://localhost:8080 \
+  --grpc-server=localhost:8090 \
+  --insecure-skip-verify
 ```
 
-**Step 3: Monitor Distribution Status**
+**Step 4: Monitor Distribution Status**
 
 ```bash
-# List the current management_clusters
-awscurl --service execute-api --region $REGION https://$API_GATEWAY_API/prod/api/v0/management_clusters
+# List all ManifestWorks for the consumer
+echo ""
+echo "Listing ManifestWorks for consumer ${MC_CLUSTER_NAME}:"
+go run examples/manifestwork/client.go list \
+  --consumer-name=${MC_CLUSTER_NAME} \
+  --maestro-server=http://localhost:8080 \
+  --grpc-server=localhost:8090 \
+  --insecure-skip-verify
 
-# List all ManifestWorks, jq to filter by consumer
-awscurl --service execute-api --region $REGION https://$API_GATEWAY_API/prod/api/v0/resource_bundles
-
-# Example:
-awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.us-east-2.amazonaws.com/prod/api/v0/management_clusters
-
-awscurl --service execute-api --region us-east-2 https://z0l5l43or4.execute-api.us-east-2.amazonaws.com/prod/api/v0/resource_bundles | jq -r '.items[].status.resourceStatus[]'
+# Get specific ManifestWork details
+echo ""
+echo "Getting details for maestro-payload-test-${TIMESTAMP}:"
+go run examples/manifestwork/client.go get maestro-payload-test-${TIMESTAMP} \
+  --consumer-name=${MC_CLUSTER_NAME} \
+  --maestro-server=http://localhost:8080 \
+  --grpc-server=localhost:8090 \
+  --insecure-skip-verify
 ```
 
+**Step 5: Verify Payload on Management Cluster**
+
+```bash
+# Switch to Management Cluster
+./scripts/dev/bastion-connect.sh management
+
+echo "Verifying ConfigMap was created via Maestro MQTT distribution:"
+kubectl get configmap maestro-payload-test -n default -o yaml
+
+echo ""
+echo "Checking payload data integrity:"
+kubectl get configmap maestro-payload-test -n default -o jsonpath='{.data}' | jq .
+```
 </details>
 
